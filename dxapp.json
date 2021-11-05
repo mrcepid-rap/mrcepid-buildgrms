@@ -1,0 +1,129 @@
+{
+  "name": "mrcepid-buildgrms",
+  "title": "BuildGRMs",
+  "summary": "Generates a variety of Relatedness Matricies for various burden testing methods",
+  "dxapi": "1.0.0",
+  "version": "0.0.2",
+  "openSource": true,
+  "inputSpec": [],
+  "outputSpec": [
+    {
+      "name": "output_pgen",
+      "label": "Output filtered pgen file limited to pass SNPs and WES individuals",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.pgen"
+      ],
+      "help": "SNP/Sample-filtered autosomal plink format file."
+    },
+    {
+      "name": "output_psam",
+      "label": "Output filtered psam file limited to pass SNPs and WES individuals",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.psam"
+      ],
+      "help": "Associated sample file"
+    },
+    {
+      "name": "output_pvar",
+      "label": "Output filtered pvar file limited to pass SNPs and WES individuals",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.pvar"
+      ],
+      "help": "Associated variant file"
+    },
+    {
+      "name": "wba_related_filter",
+      "label": "List of related, WBA individuals to exclude for some association testing",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.txt"
+      ],
+      "help": "non-Euro, related list for exclusion"
+    },
+    {
+      "name": "wba_filter",
+      "label": "List of WBA individuals to exclude for some association testing",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.txt"
+      ],
+      "help": "Euro list for inclusion"
+    },
+    {
+      "name": "related_filter",
+      "label": "List of related individuals to exclude for some association testing",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.txt"
+      ],
+      "help": "related list for exclusion"
+    },
+    {
+      "name": "grm",
+      "label": "genetic relatedness matrix to use for association testing",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.mtx"
+      ],
+      "help": "SAIGE-compatible GRM"
+    },
+    {
+      "name": "grm_samp",
+      "label": "sample file for the genetic relatedness matrix to use for association testing",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.mtx.sample"
+      ],
+      "help": "Associated .sample file"
+    },
+    {
+      "name": "snp_list",
+      "label": "list of low MAC variants for exclusion purposes",
+      "class": "file",
+      "optional": false,
+      "patterns": [
+        "*.snplist"
+      ],
+      "help": "List of low MAC SNPs to exclude from BOLT"
+    }
+  ],
+  "runSpec": {
+    "timeoutPolicy": {
+      "*": {
+        "hours": 8
+      }
+    },
+    "interpreter": "python3",
+    "file": "src/mrcepid-buildgrms.py",
+    "distribution": "Ubuntu",
+    "release": "20.04",
+    "version": "0",
+    "execDepends": [
+      {"name": "pandas",
+      "package_manager": "pip"}
+    ]
+  },
+  "access": {
+    "network": ["*"]
+  },
+  "regionalOptions": {
+    "aws:eu-west-2": {
+      "systemRequirements": {
+        "*": {
+          "instanceType": "mem2_ssd1_v2_x16"
+        }
+      }
+    }
+  }
+}
