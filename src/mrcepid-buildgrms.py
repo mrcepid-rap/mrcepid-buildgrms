@@ -49,14 +49,13 @@ def run_cmd(cmd: str, is_docker: bool = False) -> None:
 def ingest_resources() -> None:
 
     # Ingest the UKBB plink files (this also includes relatedness and snp/sample QC files)
-    dxpy.download_folder('project-G2XK5zjJXk83yZ598Z7BpGPk',
+    dxpy.download_folder('project-G6BJF50JJv8p4PjGB9yy7YQ2',
                          'genotypes/',
                          folder = "/Bulk/Genotype Results/Genotype calls/")
 
-    # Grab the chrY vcf to get sample IDs from. I think it's likely the smallest?
-    dxpy.download_dxfile(dxid = 'file-Fz7GfKjJfQZy0y652gXxxYJz',
-                         filename = "chrY.vcf.gz",
-                         project = 'project-G2XK5zjJXk83yZ598Z7BpGPk')
+    # Download a pre-computed sample IDs file.
+    dxpy.download_dxfile(dxid = 'file-G6g569QJJv8XFyvb9Gf20JV7',
+                         filename = "wes_samples.txt")
 
     # Pull wba file:
     dxpy.download_dxfile(dxid = 'file-G51V550JXk8FgfY84jXVxyqK',
@@ -98,10 +97,7 @@ def get_individuals() -> set:
         if indv['European_ancestry'] == "1":
             wba.add(str(indv['n_eid']))
 
-    # Get overall list of individuals with WES data so we can subset the genetic data
-    cmd = "bcftools query -l /test/chrY.vcf.gz > wes_samples.txt"
-    run_cmd(cmd, True)
-    # And then read it back into a set()
+    # Read overall list of individuals with WES data so we can subset the genetic data.
     wes_samp_file = open('wes_samples.txt', 'r')
     wes_samples = set()
     for eid in wes_samp_file:
@@ -249,10 +245,10 @@ def check_QC(wes_samples: set, missingness: dict) -> None:
 def filter_plink() -> None:
 
     # Retain pass samples and pass SNPs
-    cmd = "plink2 --mac 1 --pfile /test/UKBB_500K_Autosomes --make-bed --extract /test/pass_snps.txt --keep-fam /test/samp_pass_gt_qc.txt --out /test/UKBB_200K_Autosomes_QCd"
+    cmd = "plink2 --mac 1 --pfile /test/UKBB_500K_Autosomes --make-bed --extract /test/pass_snps.txt --keep-fam /test/samp_pass_gt_qc.txt --out /test/UKBB_450K_Autosomes_QCd"
     run_cmd(cmd, True)
     # Generate a list of low MAC sites for BOLT
-    cmd = "plink2 --bfile /test/UKBB_200K_Autosomes_QCd --max-mac 100 --write-snplist --out /test/UKBB_200K_Autosomes_QCd.low_MAC"
+    cmd = "plink2 --bfile /test/UKBB_450K_Autosomes_QCd --max-mac 100 --write-snplist --out /test/UKBB_450K_Autosomes_QCd.low_MAC"
     run_cmd(cmd, True)
 
 
@@ -260,9 +256,9 @@ def filter_plink() -> None:
 def make_GRM() -> None:
 
     cmd = "createSparseGRM.R " \
-          "--plinkFile=/test/UKBB_200K_Autosomes_QCd " \
-          "--nThreads=16 " \
-          "--outputPrefix=/test/sparseGRM_200K_Autosomes_QCd " \
+          "--plinkFile=/test/UKBB_450K_Autosomes_QCd " \
+          "--nThreads=32 " \
+          "--outputPrefix=/test/sparseGRM_450K_Autosomes_QCd " \
           "--numRandomMarkerforSparseKin=2000 " \
           "--relatednessCutoff=0.125"
     run_cmd(cmd, True)
@@ -302,17 +298,16 @@ def main():
     make_GRM()
 
     ## Have to do 'upload_local_file' to make sure the new file is registered with dna nexus
-    output = {'output_pgen': dxpy.dxlink(dxpy.upload_local_file('UKBB_200K_Autosomes_QCd.bed')),
-              'output_psam': dxpy.dxlink(dxpy.upload_local_file('UKBB_200K_Autosomes_QCd.fam')),
-              'output_pvar': dxpy.dxlink(dxpy.upload_local_file('UKBB_200K_Autosomes_QCd.bim')),
+    output = {'output_pgen': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.bed')),
+              'output_psam': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.fam')),
+              'output_pvar': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.bim')),
               'wba_related_filter': dxpy.dxlink(dxpy.upload_local_file('EXCLUDEFOR_White_Euro_Relateds.txt')),
               'wba_filter': dxpy.dxlink(dxpy.upload_local_file('KEEPFOR_White_Euro.txt')),
               'related_filter': dxpy.dxlink(dxpy.upload_local_file('EXCLUDEFOR_Relateds.txt')),
-              'grm': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_200K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx')),
-              'grm_samp': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_200K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx.sampleIDs.txt')),
-              'snp_list': dxpy.dxlink(dxpy.upload_local_file('UKBB_200K_Autosomes_QCd.low_MAC.snplist'))}
+              'grm': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx')),
+              'grm_samp': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx.sampleIDs.txt')),
+              'snp_list': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.low_MAC.snplist'))}
 
     return output
-
 
 dxpy.run()
