@@ -158,25 +158,19 @@ We then generate a filtered .bed file for rare variant association testing using
 
 ```commandline
 plink2 --mac 1 --pfile /test/UKBB_500K_Autosomes --make-bed \
-        --extract /test/pass_snps.txt \ 
+        --extract /test/pass_snps.txt \
         --keep-fam /test/samp_pass_gt_qc.txt \
         --out /test/UKBB_450K_Autosomes_QCd
 ```
 
 We also generate a list of low minor-allele count sites (MAC ≤ 100) to exclude when running BOLT here. 
 
-### 4. Make a GRM Compatible with SAIGE
+### 4. Make a GRM 
 
-SAIGE allows for pre-computing a compatible GRM. We do that here using the following command line:
-
-```commandline
-createSparseGRM.R \
-          --plinkFile=UKBB_450K_Autosomes_QCd \
-          --nThreads=16 \
-          --outputPrefix=sparseGRM_450K_Autosomes_QCd \
-          --numRandomMarkerforSparseKin=2000 \
-          --relatednessCutoff=0.125"
-```
+We again use the relatedness file pre-computed by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z) provided
+on the RAP as `ukb_rel.dat`. We simply convert this into a sparse matrix that can be read by the R package [Matrix](https://cran.r-project.org/web/packages/Matrix/index.html)
+and include all individuals matched with themselves (e.g. the diagonal of the matrix) with a kinship coefficient of 0.5
+(e.g. the kinship of identical twins).
 
 ## Running on DNANexus
 
@@ -189,17 +183,17 @@ This applet has no inputs and all are required files are hardcoded by default.
 All outputs have pre-determined names that cannot be changed on the command line. The file names are documented in the 
 output table here:
 
-|output                 | description       | file name |
-|-----------------------|-------------------| --------- |
-|output_pgen            | SNP/Sample-filtered autosomal plink format file from [step 3](#3-perform-filtering) above | `UKBB_450K_Autosomes_QCd.bed` |
-|output_psam            | Associated sample file                                                                    | `UKBB_450K_Autosomes_QCd.fam` |
-|output_pvar            | Associated variant file                                                                   | `UKBB_450K_Autosomes_QCd.bim` |
-|wba_related_filter     | non-Euro, related list for exclusion from [step 1](#1-selecting-individuals) above        | `EXCLUDEFOR_White_Euro_Relateds.txt` |
-|wba_filter             | Euro list for inclusion from [step 1](#1-selecting-individuals) above                     | `KEEPFOR_White_Euro.txt` |
-|related_filter         | related list for exclusion from [step 1](#1-selecting-individuals) above                  | `EXCLUDEFOR_Relateds.txt` |
-|grm                    | SAIGE-compatible GRM from [step4](#4-make-a-grm-compatible-with-saige) above              | `sparseGRM_450K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx` |
-|grm_samp               | Associated .sample file                                                                   | `sparseGRM_450K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx.sampleIDs.txt` |
-|snp_list               | List of low MAC SNPs to exclude from BOLT from [step3](#3-perform-filtering) above        | `UKBB_450K_Autosomes_QCd.low_MAC.snplist` |
+|output                 | description                                                                               | file name                                                  |
+|-----------------------|-------------------------------------------------------------------------------------------|------------------------------------------------------------|
+|output_pgen            | SNP/Sample-filtered autosomal plink format file from [step 3](#3-perform-filtering) above | `UKBB_450K_Autosomes_QCd.bed`                              |
+|output_psam            | Associated sample file                                                                    | `UKBB_450K_Autosomes_QCd.fam`                              |
+|output_pvar            | Associated variant file                                                                   | `UKBB_450K_Autosomes_QCd.bim`                              |
+|wba_related_filter     | non-Euro, related list for exclusion from [step 1](#1-selecting-individuals) above        | `EXCLUDEFOR_White_Euro_Relateds.txt`                       |
+|wba_filter             | Euro list for inclusion from [step 1](#1-selecting-individuals) above                     | `KEEPFOR_White_Euro.txt`                                   |
+|related_filter         | related list for exclusion from [step 1](#1-selecting-individuals) above                  | `EXCLUDEFOR_Relateds.txt`                                  |
+|grm                    | SAIGE-compatible GRM from [step4](#4-make-a-grm-compatible-with-saige) above              | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx`               |
+|grm_samp               | Associated .sample file                                                                   | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt` |
+|snp_list               | List of low MAC SNPs to exclude from BOLT from [step3](#3-perform-filtering) above        | `UKBB_450K_Autosomes_QCd.low_MAC.snplist`                  |
 
 ### Command line example
 

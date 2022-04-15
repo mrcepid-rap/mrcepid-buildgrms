@@ -15,7 +15,7 @@ import os
 import dxpy
 import subprocess
 import csv
-import pandas
+import pandas as pd
 import numpy as np
 
 
@@ -63,7 +63,7 @@ def ingest_resources() -> None:
 
 
 # This is a helper function to get_individuals() it
-def select_related_individual(rel: pandas.DataFrame, samples_to_exclude: list) -> dict:
+def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> dict:
 
     # Remove individuals not in samples_to_exclude:
     rel = rel[rel['ID1'].isin(samples_to_exclude) == False]
@@ -72,7 +72,7 @@ def select_related_individual(rel: pandas.DataFrame, samples_to_exclude: list) -
     # Get a list of related individuals:
     # This first bit makes one column of ID1 and ID2 so we can total the amount of times each individual occurs in rel
     rel_ids = [rel['ID1'], rel['ID2']]
-    rel_ids = pandas.DataFrame(data = pandas.concat(rel_ids), columns = ['ID']) # and convert back into a DataFrame
+    rel_ids = pd.DataFrame(data = pd.concat(rel_ids), columns = ['ID']) # and convert back into a DataFrame
 
     # This makes a dummy variable for each individual so that we can...
     rel_ids['dummy'] = [1] * len(rel_ids)
@@ -108,7 +108,7 @@ def get_individuals() -> set:
     # Read the relatedness file in as a pandas DataFrame
     # dtype sets eids as characters
     # ID1 and ID2 are two spearate individuals that are related according to some kinship value
-    rel = pandas.read_csv("genotypes/ukb_rel.dat",
+    rel = pd.read_csv("genotypes/ukb_rel.dat",
                           delim_whitespace = True,
                           dtype = {'ID1': np.str_, 'ID2': np.str_})
 
@@ -159,7 +159,7 @@ def get_individuals() -> set:
     wba_exclusion_list.close()
     rel_exclusion_list.close()
 
-    return(wes_samples) ## Return a memory-stored set of samples for later
+    return wes_samples ## Return a memory-stored set of samples for later
 
 
 # Calculate per-snp missingness for filtering purposes:
@@ -252,16 +252,62 @@ def filter_plink() -> None:
     run_cmd(cmd, True)
 
 
-# SAIGE allows for precomputing a GRM to save runtime. We do that here:
-def make_GRM() -> None:
+# This is a helper function for building GRMs to ensure that the resulting matrix is lower-left
+def column_swap(col1, col2):
+    if col1 < col2:
+        return col2, col1
+    else:
+        return col1, col2
 
-    cmd = "createSparseGRM.R " \
-          "--plinkFile=/test/UKBB_450K_Autosomes_QCd " \
-          "--nThreads=32 " \
-          "--outputPrefix=/test/sparseGRM_450K_Autosomes_QCd " \
-          "--numRandomMarkerforSparseKin=2000 " \
-          "--relatednessCutoff=0.125"
-    run_cmd(cmd, True)
+
+# We use the KING-relate derived relatedness information for our GRM. Just need to convert it into a format that
+# SAIGE and STAAR can use...
+def make_GRM(wes_samples: set) -> None:
+
+    # Construct a pd.DataFrame of wes_samples for merging purposes
+    wes_samples_sorted = sorted(wes_samples)
+    wes_samples_sorted = pd.DataFrame(data={'ID1':wes_samples_sorted, 'ID2': wes_samples_sorted, 'Kinship':[0.5] * len(wes_samples_sorted)})
+    wes_samples_sorted['column1'] = wes_samples_sorted.index + 1
+    wes_samples_sorted['column2'] = wes_samples_sorted.index + 1
+
+    # import UKBB KING matrix
+    gt_matrix = pd.read_csv("genotypes/ukb_rel.dat", sep=" ", dtype={'ID1': str, 'ID2': str})
+    gt_matrix = gt_matrix.drop(columns=['HetHet','IBS0'])
+
+    # Filter to individuals that have WES data...
+    gt_matrix = gt_matrix[gt_matrix['ID1'].isin(wes_samples)]
+    gt_matrix = gt_matrix[gt_matrix['ID2'].isin(wes_samples)]
+
+    # Get column incidies from the wes_samples for the gt matrix
+    gt_matrix = pd.merge(gt_matrix, wes_samples_sorted[['ID1','column1']], on='ID1', how="left")
+    gt_matrix = pd.merge(gt_matrix, wes_samples_sorted[['ID2','column2']], on='ID2', how="left")
+
+    # Add all samples to complete the matrix diagonal and drop EIDs
+    gt_matrix = pd.concat([gt_matrix, wes_samples_sorted])
+    gt_matrix = gt_matrix[['column1','column2','Kinship']]
+
+    # And ensure that the matrix is lower left and eids are in integer format:
+    gt_matrix[['column1','column2']] = gt_matrix.apply(lambda row: column_swap(row['column1'], row['column2']), axis=1, result_type='expand')
+
+    # And sort...
+    gt_matrix = gt_matrix.sort_values(['column1','column2'])
+
+    # and ensure columns #s are in integer format:
+    gt_matrix['column1'] = gt_matrix.apply(lambda row: '%i' % row['column1'], axis = 1)
+    gt_matrix['column2'] = gt_matrix.apply(lambda row: '%i' % row['column2'], axis = 1)
+
+    # And print outputs:
+    with open('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx', 'w') as matrix:
+        matrix.write('%%MatrixMarket matrix coordinate real symmetric\n')
+        matrix.write('{n_samps} {n_samps} {n_rows}\n'.format(n_samps=len(wes_samples_sorted), n_rows=len(gt_matrix)))
+        for row in gt_matrix.iterrows():
+            ret = matrix.write('{col1} {col2} {kin}\n'.format(col1=row[1]['column1'], col2=row[1]['column2'], kin=row[1]['Kinship']))
+        matrix.close()
+
+    with open('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt', 'w') as matrix_samples:
+        for row in wes_samples_sorted.iterrows():
+            ret = matrix_samples.write('{samp}\n'.format(samp=row[1]['ID1']))
+        matrix_samples.close()
 
 
 @dxpy.entry_point('main')
@@ -295,7 +341,7 @@ def main():
 
     # Now here we generate GRMs for tools that require it (SAIGE & STAAR):
     # BOLT and REGENIE use raw PLINK files, so do not need it here:
-    make_GRM()
+    make_GRM(wes_samples)
 
     ## Have to do 'upload_local_file' to make sure the new file is registered with dna nexus
     output = {'output_pgen': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.bed')),
@@ -304,8 +350,8 @@ def main():
               'wba_related_filter': dxpy.dxlink(dxpy.upload_local_file('EXCLUDEFOR_White_Euro_Relateds.txt')),
               'wba_filter': dxpy.dxlink(dxpy.upload_local_file('KEEPFOR_White_Euro.txt')),
               'related_filter': dxpy.dxlink(dxpy.upload_local_file('EXCLUDEFOR_Relateds.txt')),
-              'grm': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx')),
-              'grm_samp': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd_relatednessCutoff_0.125_2000_randomMarkersUsed.sparseGRM.mtx.sampleIDs.txt')),
+              'grm': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx')),
+              'grm_samp': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt')),
               'snp_list': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.low_MAC.snplist'))}
 
     return output
