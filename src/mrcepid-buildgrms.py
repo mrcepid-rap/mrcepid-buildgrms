@@ -58,7 +58,7 @@ def ingest_resources() -> None:
                          filename = "wes_samples.txt")
 
     # Pull wba file:
-    dxpy.download_dxfile(dxid = 'file-G51V550JXk8FgfY84jXVxyqK',
+    dxpy.download_dxfile(dxid = 'file-GBVVXxjJJv8f3vzz3QY151yY',
                          filename = "wba.txt")
 
 
