@@ -3,9 +3,32 @@
   "title": "BuildGRMs",
   "summary": "Generates a variety of Relatedness Matricies for various burden testing methods",
   "dxapi": "1.0.0",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "openSource": true,
-  "inputSpec": [],
+  "inputSpec": [
+    {
+      "name": "genetic_data_folder",
+      "label": "Path to the folder containing UKBB genetic (array) data.",
+      "class": "string",
+      "optional": true,
+      "help": "Full file-path to the folder containing UKBB genetic (array) data. This should be a FULL file path. Default has been hard-coded assuming file structure of the '/Bulk/' root directory on the RAP does not change. Note that paths with spaces need to be enclosed in quotes. [\"/Bulk/Genotype Results/Genotype calls/\"]",
+      "default": "/Bulk/Genotype Results/Genotype calls/"
+    },
+    {
+      "name": "sample_ids_file",
+      "label": "List of samples with WES data",
+      "class": "file",
+      "optional": false,
+      "help": "List of sample IDs for current application with one sample ID per line."
+    },
+    {
+      "name": "wba_file",
+      "label": "List of individuals with predominately European ancestry.",
+      "class": "file",
+      "optional": false,
+      "help": "List of individuals with predominately European ancestry for current application with one sample ID per line."
+    }
+  ],
   "outputSpec": [
     {
       "name": "output_pgen",

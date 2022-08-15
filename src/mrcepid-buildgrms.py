@@ -11,7 +11,6 @@
 # DNAnexus Python Bindings (dxpy) documentation:
 #   http://autodoc.dnanexus.com/bindings/python/current/
 
-import os
 import dxpy
 import subprocess
 import csv
@@ -28,7 +27,7 @@ def run_cmd(cmd: str, is_docker: bool = False) -> None:
         # Docker instance named /test/. This allows us to run commands on files stored on the AWS instance within Docker
         cmd = "docker run " \
               "-v /home/dnanexus:/test " \
-              "egardner413/mrcepid-associationtesting " + cmd
+              "egardner413/mrcepid-burdentesting " + cmd
 
     # Standard python calling external commands protocol
     print(cmd)
@@ -46,23 +45,43 @@ def run_cmd(cmd: str, is_docker: bool = False) -> None:
 
 # This is just to compartmentalise the collection of all the resources I need for this task and
 # get them into the right place
-def ingest_resources() -> None:
+def ingest_resources(genetic_data_folder: str, sample_ids_file: dict, wba_file: dict) -> None:
+
+    # Bring our docker image into our environment so that we can run commands we need:
+    cmd = "docker pull egardner413/mrcepid-burdentesting:latest"
+    run_cmd(cmd)
+
+    # Infer the current project ID:
+    project_id = dxpy.PROJECT_CONTEXT_ID
 
     # Ingest the UKBB plink files (this also includes relatedness and snp/sample QC files)
-    dxpy.download_folder('project-G6BJF50JJv8p4PjGB9yy7YQ2',
-                         'genotypes/',
-                         folder = "/Bulk/Genotype Results/Genotype calls/")
+    # This is done __ASSUMING__ the file path to the bulk genotype data HAS NOT CHANGED. This can be changed from the
+    # default with input settings.
+    dxpy.download_folder(project=project_id,
+                         destdir='genotypes/',
+                         folder=genetic_data_folder)
 
     # Download a pre-computed sample IDs file.
-    dxpy.download_dxfile(dxid = 'file-G6g569QJJv8XFyvb9Gf20JV7',
-                         filename = "wes_samples.txt")
+    dxpy.download_dxfile(dxid=dxpy.DXFile(sample_ids_file).get_id(),
+                         filename="wes_samples.txt")
 
-    # Pull wba file:
-    dxpy.download_dxfile(dxid = 'file-GBVVXxjJJv8f3vzz3QY151yY',
-                         filename = "wba.txt")
+    # Download wba file:
+    dxpy.download_dxfile(dxid=dxpy.DXFile(wba_file).get_id(),
+                         filename="wba.txt")
 
 
-# This is a helper function to get_individuals() it
+# Function simply merges all autosomal files together
+def merge_plink_files() -> None:
+    # Merge autosomal PLINK files together:
+    with open('merge_list.txt', 'w') as merge_list:
+        for chr in range(1, 23):
+            merge_list.write("/test/genotypes/ukb22418_c%d_b0_v2\n" % (chr))
+        merge_list.close()
+    cmd = "plink2 --pmerge-list /test/merge_list.txt bfile --out /test/UKBB_500K_Autosomes"
+    run_cmd(cmd, True)
+
+
+# This is a helper function to get_individuals()
 def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> dict:
 
     # Remove individuals not in samples_to_exclude:
@@ -81,7 +100,7 @@ def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> di
     # ... and then we sort it by that value
     rel_totals = rel_totals.sort_values(by = 'total')
 
-    return({'rel': rel, 'rel_totals': rel_totals})
+    return {'rel': rel, 'rel_totals': rel_totals}
 
 
 # This function generates a list of related individuals and then generates various exclusions lists based on
@@ -311,22 +330,13 @@ def make_GRM(wes_samples: set) -> None:
 
 
 @dxpy.entry_point('main')
-def main():
-
-    # Bring our docker image into our environment so that we can run commands we need:
-    cmd = "docker pull egardner413/mrcepid-associationtesting:latest"
-    run_cmd(cmd)
+def main(genetic_data_folder: str, sample_ids_file: dict, wba_file: dict):
 
     # Grab plink files and sample exclusion lists
-    ingest_resources()
+    ingest_resources(genetic_data_folder, sample_ids_file, wba_file)
 
-    # Merge autosomal PLINK files together:
-    with open('merge_list.txt', 'w') as merge_list:
-        for chr in range(1, 23):
-            merge_list.write("/test/genotypes/ukb22418_c%d_b0_v2\n" % (chr))
-        merge_list.close()
-    cmd = "plink2 --pmerge-list /test/merge_list.txt bfile --out /test/UKBB_500K_Autosomes"
-    run_cmd(cmd, True)
+    # merge autosomal plink files together
+    merge_plink_files()
 
     # Decide on a set of individuals to extract from plink files and get per-SNP missingness:
     wes_samples = get_individuals()
