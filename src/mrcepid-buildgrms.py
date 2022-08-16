@@ -264,10 +264,10 @@ def check_QC(wes_samples: set, missingness: dict) -> None:
 def filter_plink() -> None:
 
     # Retain pass samples and pass SNPs
-    cmd = "plink2 --mac 1 --pfile /test/UKBB_500K_Autosomes --make-bed --extract /test/pass_snps.txt --keep-fam /test/samp_pass_gt_qc.txt --out /test/UKBB_450K_Autosomes_QCd"
+    cmd = "plink2 --mac 1 --pfile /test/UKBB_500K_Autosomes --make-bed --extract /test/pass_snps.txt --keep-fam /test/samp_pass_gt_qc.txt --out /test/UKBB_470K_Autosomes_QCd"
     run_cmd(cmd, True)
     # Generate a list of low MAC sites for BOLT
-    cmd = "plink2 --bfile /test/UKBB_450K_Autosomes_QCd --max-mac 100 --write-snplist --out /test/UKBB_450K_Autosomes_QCd.low_MAC"
+    cmd = "plink2 --bfile /test/UKBB_470K_Autosomes_QCd --max-mac 100 --write-snplist --out /test/UKBB_470K_Autosomes_QCd.low_MAC"
     run_cmd(cmd, True)
 
 
@@ -316,14 +316,14 @@ def make_GRM(wes_samples: set) -> None:
     gt_matrix['column2'] = gt_matrix.apply(lambda row: '%i' % row['column2'], axis = 1)
 
     # And print outputs:
-    with open('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx', 'w') as matrix:
+    with open('sparseGRM_470K_Autosomes_QCd.sparseGRM.mtx', 'w') as matrix:
         matrix.write('%%MatrixMarket matrix coordinate real symmetric\n')
         matrix.write('{n_samps} {n_samps} {n_rows}\n'.format(n_samps=len(wes_samples_sorted), n_rows=len(gt_matrix)))
         for row in gt_matrix.iterrows():
             ret = matrix.write('{col1} {col2} {kin}\n'.format(col1=row[1]['column1'], col2=row[1]['column2'], kin=row[1]['Kinship']))
         matrix.close()
 
-    with open('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt', 'w') as matrix_samples:
+    with open('sparseGRM_470K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt', 'w') as matrix_samples:
         for row in wes_samples_sorted.iterrows():
             ret = matrix_samples.write('{samp}\n'.format(samp=row[1]['ID1']))
         matrix_samples.close()
@@ -354,15 +354,15 @@ def main(genetic_data_folder: str, sample_ids_file: dict, wba_file: dict):
     make_GRM(wes_samples)
 
     ## Have to do 'upload_local_file' to make sure the new file is registered with dna nexus
-    output = {'output_pgen': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.bed')),
-              'output_psam': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.fam')),
-              'output_pvar': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.bim')),
+    output = {'output_pgen': dxpy.dxlink(dxpy.upload_local_file('UKBB_470K_Autosomes_QCd.bed')),
+              'output_psam': dxpy.dxlink(dxpy.upload_local_file('UKBB_470K_Autosomes_QCd.fam')),
+              'output_pvar': dxpy.dxlink(dxpy.upload_local_file('UKBB_470K_Autosomes_QCd.bim')),
               'wba_related_filter': dxpy.dxlink(dxpy.upload_local_file('EXCLUDEFOR_White_Euro_Relateds.txt')),
               'wba_filter': dxpy.dxlink(dxpy.upload_local_file('KEEPFOR_White_Euro.txt')),
               'related_filter': dxpy.dxlink(dxpy.upload_local_file('EXCLUDEFOR_Relateds.txt')),
-              'grm': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx')),
-              'grm_samp': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt')),
-              'snp_list': dxpy.dxlink(dxpy.upload_local_file('UKBB_450K_Autosomes_QCd.low_MAC.snplist'))}
+              'grm': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_470K_Autosomes_QCd.sparseGRM.mtx')),
+              'grm_samp': dxpy.dxlink(dxpy.upload_local_file('sparseGRM_470K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt')),
+              'snp_list': dxpy.dxlink(dxpy.upload_local_file('UKBB_470K_Autosomes_QCd.low_MAC.snplist'))}
 
     return output
 
