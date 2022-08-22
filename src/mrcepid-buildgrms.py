@@ -20,25 +20,36 @@ import numpy as np
 
 # This function runs a command on an instance, either with or without calling the docker instance we downloaded
 # By default, commands are not run via Docker, but can be changed by setting is_docker = True
-def run_cmd(cmd: str, is_docker: bool = False) -> None:
+def run_cmd(cmd: str, is_docker: bool = False, stdout_file: str = None, print_cmd = False) -> None:
 
+    # -v here mounts a local directory on an instance (in this case the home dir) to a directory internal to the
+    # Docker instance named /test/. This allows us to run commands on files stored on the AWS instance within Docker.
+    # This looks slightly different from other versions of this command I have written as I needed to write a custom
+    # R script to run STAAR. That means we have multiple mounts here to enable this code to find the script.
     if is_docker:
-        # -v here mounts a local directory on an instance (in this case the home dir) to a directory internal to the
-        # Docker instance named /test/. This allows us to run commands on files stored on the AWS instance within Docker
         cmd = "docker run " \
               "-v /home/dnanexus:/test " \
+              "-v /usr/bin/:/prog " \
               "egardner413/mrcepid-burdentesting " + cmd
 
+    if print_cmd:
+        print(cmd)
+
     # Standard python calling external commands protocol
-    print(cmd)
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = proc.communicate()
+    if stdout_file is not None:
+        with open(stdout_file, 'w') as stdout_writer:
+            stdout_writer.write(stdout.decode('utf-8'))
+        stdout_writer.close()
 
     # If the command doesn't work, print the error stream and close the AWS instance out with 'dxpy.AppError'
     if proc.returncode != 0:
         print("The following cmd failed:")
         print(cmd)
-        print("STDERROR follows\n")
+        print("STDOUT follows\n")
+        print(stdout.decode('utf-8'))
+        print("STDERR follows\n")
         print(stderr.decode('utf-8'))
         raise dxpy.AppError("Failed to run properly...")
 
