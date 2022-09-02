@@ -207,7 +207,7 @@ def calculate_missingness() -> dict:
     for snp in missingness_qc:
         missingness[snp['ID']] = float(snp['F_MISS'])
 
-    return(missingness)
+    return missingness
 
 
 # Check per-SNP and per-sample quality control
