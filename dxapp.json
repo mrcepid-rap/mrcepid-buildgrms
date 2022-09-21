@@ -1,7 +1,7 @@
 {
   "name": "mrcepid-buildgrms",
   "title": "BuildGRMs",
-  "summary": "Generates a variety of Relatedness Matricies for various burden testing methods",
+  "summary": "Generates a variety of Relatedness Matrices for various burden testing methods",
   "dxapi": "1.0.0",
   "version": "1.0.0",
   "openSource": true,
@@ -22,11 +22,11 @@
       "help": "List of sample IDs for current application with one sample ID per line."
     },
     {
-      "name": "wba_file",
-      "label": "List of individuals with predominately European ancestry.",
+      "name": "ancestry_file",
+      "label": "List of individuals with assigned ancestry status.",
       "class": "file",
       "optional": false,
-      "help": "List of individuals with predominately European ancestry for current application with one sample ID per line."
+      "help": "List of individuals demarcated by ancestry for current application with one sample ID per line. Ancestry label must be one of eur, sas, afr, or NA."
     }
   ],
   "outputSpec": [
@@ -61,34 +61,14 @@
       "help": "Associated variant file"
     },
     {
-      "name": "wba_related_filter",
-      "label": "List of related, WBA individuals to exclude for some association testing",
-      "class": "file",
+      "name": "inclusion_lists",
+      "label": "List of related and unrelated individuals for all ancestries.",
+      "class": "array:file",
       "optional": false,
       "patterns": [
         "*.txt"
       ],
-      "help": "non-Euro, related list for exclusion"
-    },
-    {
-      "name": "wba_filter",
-      "label": "List of WBA individuals to exclude for some association testing",
-      "class": "file",
-      "optional": false,
-      "patterns": [
-        "*.txt"
-      ],
-      "help": "Euro list for inclusion"
-    },
-    {
-      "name": "related_filter",
-      "label": "List of related individuals to exclude for some association testing",
-      "class": "file",
-      "optional": false,
-      "patterns": [
-        "*.txt"
-      ],
-      "help": "related list for exclusion"
+      "help": "Two lists for each ancestry to generate related and unrelated subsets as well as an 'ALL' category."
     },
     {
       "name": "grm",

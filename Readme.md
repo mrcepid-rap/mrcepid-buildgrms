@@ -152,7 +152,7 @@ We include samples that:
 
 1. Are included in the WES sample list
 2. Is not in the heterozygous missingness outliers list
-3. Is part of samples included in autosomal phasing
+3. Are samples included in autosomal or allosomal phasing
 
 ### 3. Perform Filtering
 
@@ -210,29 +210,35 @@ Theoretically any raw vcf.gz can be used, but the chrY vcf was used since it is 
 
 #### WBA File
 
-The file of 'European' genetic ancestry can be defined based on user preference. UK Biobank [provides a precomputed](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006) 
-European ancestry definition for all UK Biobank participants. We have decided to generate a more lenient definition of
-European genetic ancestry to allow for more samples to be included in our models. Generation of this file involves the 
+The file of genetic ancestries can be defined based on user preference. UK Biobank [provides a precomputed](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006) 
+European ancestry definition for all UK Biobank participants. We have decided to generate a broader definition of
+genetic ancestry to allow for more samples to be included in our models. Generation of this file involves the 
 following steps:
 
-1. Extract PC1 - PC6 and WBA field (22006)[https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006]. Precomputed PCs 
-   and WBA flag were made available by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z) 
-   These were extracted from the RAP UKBB database and imported into R.
-2. Calculate a wider set of samples to include than Bycroft et al. The flagship UKBB paper selected a very constrained
-    set of individuals. We have decided to identify a slightly more inclusive set of individuals:
-   1. Calculate median and MAD of each PC. 
-   2. median ± MAD * 5 for all 6 PCs
-   3. Identify individuals that lie within the ellipse for **ALL** combinations of PC1+PC2, PC3+PC4, PC5+PC6
-3. Write a file of individuals with our new WBA definition with the following **space-delimited** format:
+1. Extract PC1 - PC4 and self-reported ethnicity field (21000)[https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=21000]. 
+   Precomputed PCs were made available by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z).
+   PCs were extracted from the RAP UKBB database and imported into R.
+2. Calculate a wider set of samples to include than Bycroft et al. The flagship UKBB paper selected a more constrained 
+   set of individuals. We have decided to identify a slightly more inclusive set of individuals:
+      1. Use k-means clustering on the first 4 PCs to define broader groupings
+      2. Use self-reported ethnicity to 'confirm' these findings and exclude individuals that do not fit into one of 
+         European, South Asian, or African groupings. Individuals that do not fit are given a value of 'NA' and are mostly 
+         individuals that report mixed background. See our [QC guidance](https://github.com/mrcepid-rap/QC_workflow) for
+         more information on ancestry definitions and data processing .
+3. Write a file of individuals with our new european definition with the following **space-delimited** format. Case of the labels
+   does not affect downstream processing:
 
 ```text
-n_eid European_ancestry
-1234567 1
-7654321 0
+n_eid ancestry
+1234567 eur
+7654321 NA
+2541838 sas
+9742334 afr
+2472374 eur
 ```
 
-The first line is a header, while the following two lines represent an individual with European genetic ancestry and an 
-individual without European genetic ancestry.
+The first line is a header, while the following lines represent an individual with European, unknown, south-Asian, 
+African, and European genetic ancestry, respectively.
 
 ### Outputs
 
