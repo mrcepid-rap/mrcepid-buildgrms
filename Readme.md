@@ -119,18 +119,15 @@ on the RAP as `ukb_rel.dat`. In brief, we:
 + Remove the individual with the most relatedness pairs.
 + Repeat until no relatedness pairs are left
 
-3. White, European genetic ancestry
+3. Genetic ancestry
 
-Felix Day from the MRC-Epidemiology Unit provided me with a list of individuals with white, European ancestry. This list
+Felix Day from the MRC-Epidemiology Unit provided a method to identify individuals of European ancestry. This list
 is more inclusive than that provided by UK Biobank as part of [field 22006](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006)
-on the UK Biobank data showcase.
+on the UK Biobank data showcase. I have extended this method to also generate lists of South Asian and African genetic 
+ancestry individuals. For each population two files are generated:
 
-These files are then combined in various ways to make three exclusion files that are returned as part of this applet's 
-outputs:
-
-1. EXCLUDEFOR_White_Euro_Relateds.txt – non-Euro, related individuals
-2. KEEPFOR_White_Euro.txt – white Euro genetic ancestry individuals
-3. EXCLUDEFOR_Relateds.txt - related individuals
+1. A list of participants specific to that ancestry group, including related samples (`INCLUDEFOR_{POP}_Related.txt`)
+2. A list of participants specific to that ancestry group, not including related samples (`INCLUDEFOR_{POP}_Unrelated.txt`)
 
 ### 2. Perform Genotyping QC
 
@@ -245,17 +242,15 @@ African, and European genetic ancestry, respectively.
 All outputs have pre-determined names that cannot be changed on the command line. The file names are documented in the 
 output table here:
 
-| output                   | description                                                                               | file name                                                  |
-|--------------------------|-------------------------------------------------------------------------------------------|------------------------------------------------------------|
-| output_pgen              | SNP/Sample-filtered autosomal plink format file from [step 3](#3-perform-filtering) above | `UKBB_450K_Autosomes_QCd.bed`                              |
-| output_psam              | Associated sample file                                                                    | `UKBB_450K_Autosomes_QCd.fam`                              |
-| output_pvar              | Associated variant file                                                                   | `UKBB_450K_Autosomes_QCd.bim`                              |
-| wba_related_filter       | non-Euro, related list for exclusion from [step 1](#1-selecting-individuals) above        | `EXCLUDEFOR_White_Euro_Relateds.txt`                       |
-| wba_filter               | Euro list for inclusion from [step 1](#1-selecting-individuals) above                     | `KEEPFOR_White_Euro.txt`                                   |
-| related_filter           | related list for exclusion from [step 1](#1-selecting-individuals) above                  | `EXCLUDEFOR_Relateds.txt`                                  |
-| grm                      | SAIGE-compatible GRM from [step4](#4-make-a-grm-compatible-with-saige) above              | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx`               |
-| grm_samp                 | Associated .sample file                                                                   | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt` |
-| snp_list                 | List of low MAC SNPs to exclude from BOLT from [step3](#3-perform-filtering) above        | `UKBB_450K_Autosomes_QCd.low_MAC.snplist`                  |
+| output           | description                                                                                                                                                                                                                 | file name                                                  |
+|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|
+| output_pgen      | SNP/Sample-filtered autosomal plink format file from [step 3](#3-perform-filtering) above                                                                                                                                   | `UKBB_450K_Autosomes_QCd.bed`                              |
+| output_psam      | Associated sample file                                                                                                                                                                                                      | `UKBB_450K_Autosomes_QCd.fam`                              |
+| output_pvar      | Associated variant file                                                                                                                                                                                                     | `UKBB_450K_Autosomes_QCd.bim`                              |
+| inclusion_lists  | Inclusion lists for selecting individuals during association testing. By default, generates two files, one for related samples and one for unrelated samples, for the three subpopulations (AFR, SAS, EUR) and ALL samples. | `INCLUDEFOR_{POP}_Related.txt`                             |
+| grm              | SAIGE-compatible GRM from [step4](#4-make-a-grm-compatible-with-saige) above                                                                                                                                                | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx`               |
+| grm_samp         | Associated .sample file                                                                                                                                                                                                     | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt` |
+| snp_list         | List of low MAC SNPs to exclude from BOLT from [step3](#3-perform-filtering) above                                                                                                                                          | `UKBB_450K_Autosomes_QCd.low_MAC.snplist`                  |
 
 ### Command line example
 

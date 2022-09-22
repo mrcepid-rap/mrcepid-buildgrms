@@ -22,7 +22,7 @@ import numpy as np
 
 # This function runs a command on an instance, either with or without calling the docker instance we downloaded
 # By default, commands are not run via Docker, but can be changed by setting is_docker = True
-def run_cmd(cmd: str, is_docker: bool = False, stdout_file: str = None, print_cmd = False) -> None:
+def run_cmd(cmd: str, is_docker: bool = False, stdout_file: str = None, print_cmd=False) -> None:
 
     # -v here mounts a local directory on an instance (in this case the home dir) to a directory internal to the
     # Docker instance named /test/. This allows us to run commands on files stored on the AWS instance within Docker.
@@ -88,7 +88,7 @@ def merge_plink_files() -> None:
     # Merge autosomal PLINK files together:
     with open('merge_list.txt', 'w') as merge_list:
         for chrom in range(1, 23):
-            merge_list.write("/test/genotypes/ukb22418_c%d_b0_v2\n" % (chrom))
+            merge_list.write(f'/test/genotypes/ukb22418_c{chrom}_b0_v2\n')
         merge_list.close()
     cmd = "plink2 --pmerge-list /test/merge_list.txt bfile --out /test/UKBB_500K_Autosomes"
     run_cmd(cmd, True)
@@ -109,9 +109,9 @@ def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> di
     # This makes a dummy variable for each individual so that we can...
     rel_ids['dummy'] = [1] * len(rel_ids)
     # ... sum it together to count the number of times that individual appears in the list ...
-    rel_totals = rel_ids.groupby('ID').agg(total = ('dummy','sum'))
+    rel_totals = rel_ids.groupby('ID').agg(total=('dummy', 'sum'))
     # ... and then we sort it by that value
-    rel_totals = rel_totals.sort_values(by = 'total')
+    rel_totals = rel_totals.sort_values(by='total')
 
     return {'rel': rel, 'rel_totals': rel_totals}
 
@@ -193,7 +193,6 @@ def get_individuals() -> Tuple[Set[str], List[dxpy.DXFile]]:
         # 3. list of related individuals with WES
         unrelated_path = Path(f'INCLUDEFOR_{ancestry.upper()}_Unrelated.txt')
         related_path = Path(f'INCLUDEFOR_{ancestry.upper()}_Related.txt')
-        include_files.extend([dxpy.upload_local_file(unrelated_path.name), dxpy.upload_local_file(related_path.name)])
 
         with unrelated_path.open('w') as ancestry_unrelated_inclusion_list, \
                 related_path.open('w') as ancestry_inclusion_list:
@@ -207,6 +206,9 @@ def get_individuals() -> Tuple[Set[str], List[dxpy.DXFile]]:
 
             ancestry_unrelated_inclusion_list.close()
             ancestry_inclusion_list.close()
+
+            # Upload to DNANexus
+            include_files.extend([dxpy.upload_local_file(unrelated_path.name), dxpy.upload_local_file(related_path.name)])
 
     return wes_samples, include_files  # Return a memory-stored set of samples for later
 
