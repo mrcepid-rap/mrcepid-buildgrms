@@ -19,7 +19,7 @@ https://documentation.dnanexus.com/.
 - [Running on DNANexus](#running-on-dnanexus)
   * [Inputs](#inputs)
     + [Sample IDs File](#sample-ids-file)
-    + [WBA File](#wba-file)
+    + [WBA File](#ancestry-file)
   * [Outputs](#outputs)
   * [Command line example](#command-line-example)
     + [Batch Running](#batch-running)
@@ -180,7 +180,7 @@ This tool has two primary inputs. Please see below for example commands/workflow
 | input           | description                                                                                                   |
 |-----------------|---------------------------------------------------------------------------------------------------------------|
 | sample_ids_file | List of sample IDs for current application with one sample ID per line.                                       |
-| wba_file        | List of individuals with predominately European ancestry for current application with one sample ID per line. |
+| ancestry_file   | List of individuals with predominately European ancestry for current application with one sample ID per line. |
 
 There is also one default input that can be changed if necessary.
 
@@ -205,14 +205,14 @@ bcftools query -l ukb23157_cY_b0_v1.vcf.gz
 
 Theoretically any raw vcf.gz can be used, but the chrY vcf was used since it is the fastest to download.
 
-#### WBA File
+#### Ancestry File
 
 The file of genetic ancestries can be defined based on user preference. UK Biobank [provides a precomputed](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006) 
 European ancestry definition for all UK Biobank participants. We have decided to generate a broader definition of
 genetic ancestry to allow for more samples to be included in our models. Generation of this file involves the 
 following steps:
 
-1. Extract PC1 - PC4 and self-reported ethnicity field (21000)[https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=21000]. 
+1. Extract PC1 - PC4 and self-reported ethnicity field [21000](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=21000). 
    Precomputed PCs were made available by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z).
    PCs were extracted from the RAP UKBB database and imported into R.
 2. Calculate a wider set of samples to include than Bycroft et al. The flagship UKBB paper selected a more constrained 
@@ -220,9 +220,8 @@ following steps:
       1. Use k-means clustering on the first 4 PCs to define broader groupings
       2. Use self-reported ethnicity to 'confirm' these findings and exclude individuals that do not fit into one of 
          European, South Asian, or African groupings. Individuals that do not fit are given a value of 'NA' and are mostly 
-         individuals that report mixed background. See our [QC guidance](https://github.com/mrcepid-rap/QC_workflow) for
-         more information on ancestry definitions and data processing .
-3. Write a file of individuals with our new european definition with the following **space-delimited** format. Case of the labels
+         individuals that report mixed background.
+3. Write a file of individuals with the definition defined above in the following **space-delimited** format. Case of the labels
    does not affect downstream processing:
 
 ```text
@@ -234,8 +233,9 @@ n_eid ancestry
 2472374 eur
 ```
 
-The first line is a header, while the following lines represent an individual with European, unknown, south-Asian, 
-African, and European genetic ancestry, respectively.
+The first line is a header, while the following lines represent an individual with European (eur), unknown, south-Asian (sas), 
+African (afr), and European (eur) genetic ancestry, respectively. Only the (case-nonspecific) values of 'eur', 'sas', 'afr', or 'NA' are 
+accepted. More information on how to generate this file is available in the [QC Workflow repository](https://github.com/mrcepid-rap/QC_workflow).
 
 ### Outputs
 
@@ -262,7 +262,7 @@ https://github.com/mrcepid-rap
 Running this command is straightforward using the DNANexus SDK toolkit as no inputs have to be provided on the command line:
 
 ```commandline
-dx run mrcepid-buildgrms --priority low --destination project_resources/genetics/ -isample_ids_file=file-GFjJ0yjJ0zVb9BK82ZQFkx0y -iwba_file=file-GFjX7y8J0zVgB7JbPq7K23qP
+dx run mrcepid-buildgrms --priority low --destination project_resources/genetics/ -isample_ids_file=file-GFjJ0yjJ0zVb9BK82ZQFkx0y -iancestry_file=file-GFjX7y8J0zVgB7JbPq7K23qP
 ```
 
 Brief I/O information can also be retrieved on the command line:
