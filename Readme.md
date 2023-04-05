@@ -1,4 +1,4 @@
-# CollectHsMetrics (DNAnexus Platform App)
+# MRCEpid-buildgrms (DNAnexus Platform App)
 
 This is the source code for an app that runs on the DNAnexus Platform.
 For more information about how to run or modify it, see
