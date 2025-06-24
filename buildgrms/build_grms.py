@@ -12,23 +12,30 @@
 #   http://autodoc.dnanexus.com/bindings/python/current/
 import dxpy
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler, FileType
+from general_utilities.mrc_logger import MRCLogger
 
 from buildgrms.grm_tools.grm_toolkit import ingest_resources, merge_plink_files, get_individuals, calculate_missingness, \
     check_qc_ukb, filter_plink, make_grm, calculate_relatedness, check_qc_other
 
+LOGGER = MRCLogger().get_logger()
+
 
 @dxpy.entry_point('main')
-def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, snp_qc: dict, sample_qc: dict, ukb_snp_qc: dict, ukb_snps_qc_v2: dict):
+def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, snp_qc: dict, sample_qc: dict, ukb_snp_qc: dict, ukb_snps_qc_v2: dict, relatedness_file: dict):
     # Grab plink files and sample exclusion lists
-    genetic_files, sample_ids_file, ancestry_file = ingest_resources(genetic_data_file,
+    genetic_files, sample_ids_file, ancestry_file, relatedness = ingest_resources(genetic_data_file,
                                                                      sample_ids_file,
-                                                                     ancestry_file)
+                                                                     ancestry_file,
+                                                                     relatedness_file)
 
     # merge autosomal plink files together
     merged_filename = merge_plink_files(genetic_files)
 
     # get the relatedness matrix
-    relatedness = calculate_relatedness(merged_filename)
+    if relatedness_file is None:
+        # if it has not been provided, calculate it
+        LOGGER.info(f"The relatedness file was not provided, calculating it from the merged plink files.")
+        relatedness = calculate_relatedness(merged_filename)
 
     # Decide on a set of individuals to extract from plink files and get per-SNP missingness:
     samples, include_files = get_individuals(sample_ids_file, ancestry_file, relatedness)

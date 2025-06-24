@@ -7,12 +7,11 @@
   "openSource": true,
   "inputSpec": [
     {
-      "name": "genetic_data_folder",
-      "label": "Path to the folder containing UKBB genetic (array) data.",
+      "name": "genetic_data_file",
+      "label": "Path to a genetic coordinates file, pointing to UKBB genetic (array) data.",
       "class": "string",
-      "optional": true,
-      "help": "Full file-path to the folder containing UKBB genetic (array) data. This should be a FULL file path. Default has been hard-coded assuming file structure of the '/Bulk/' root directory on the RAP does not change. Note that paths with spaces need to be enclosed in quotes. [\"/Bulk/Genotype Results/Genotype calls/\"]",
-      "default": "/Bulk/Genotype Results/Genotype calls/"
+      "optional": false,
+      "help": "Full file-path to a file that contains coordinates which point to the UKBB genetic (array) data. See the README for how this file should be formatted."
     },
     {
       "name": "sample_ids_file",
@@ -32,30 +31,37 @@
       "name": "snp_qc",
       "label": "A SNP QC file for inclusion/exclusion of variants.",
       "class": "file",
-      "optional": true,
+      "optional": false,
       "help": "This file should contain variant-level QC information from the sequencing experiments."
     },
     {
       "name": "sample_qc",
       "label": "A sample QC file for inclusion/exclusion of samples.",
       "class": "file",
-      "optional": true,
+      "optional": false,
       "help": "This file should contain any sample-level QC information from the sequencing experiments."
     },
     {
       "name": "ukb_snp_qc",
       "label": "List of individuals with assigned ancestry status.",
       "class": "file",
-      "optional": true,
+      "optional": false,
       "help": "This is a UK Biobank specific snp QC file. It's only required when using the UK Biobank data."
     },
     {
       "name": "ukb_snps_qc_v2",
       "label": "This is an additional UK Biobank specific snp QC file.",
       "class": "file",
-      "optional": true,
+      "optional": false,
       "help": "This is an additional UK Biobank specific snp QC file. It's only required when using the UK Biobank data."
-    }
+    },
+    {
+        "name": "relatedness_file",
+        "label": "This is a UK Biobank specific relatedness file.",
+        "class": "file",
+        "optional": true,
+        "help": "This file contains information about relatedness between individuals in the UK Biobank dataset. If it's not provided, the app will generate a relatedness matrix based on the genetic data file."
+        }
   ],
   "outputSpec": [
     {
@@ -136,14 +142,21 @@
       }
     },
     "interpreter": "python3",
-    "file": "src/mrcepid-buildgrms.py",
+    "file": "buildgrms/build_grms.py",
     "distribution": "Ubuntu",
     "release": "20.04",
     "version": "0",
     "execDepends": [
       {
-        "name": "pandas",
+        "name": "uv",
         "package_manager": "pip"
+      },
+      {
+        "name": "mrcepid-buildgrms",
+        "package_manager": "git",
+        "url": "https://github.com/mrcepid-rap/mrcepid-buildgrms.git",
+        "tag": "main",
+        "build_commands": "uv pip install --system ."
       }
     ]
   },

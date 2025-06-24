@@ -1,7 +1,8 @@
 import csv
 import os
+import subprocess
 from pathlib import Path
-from typing import List, Dict, Set, Tuple, Union
+from typing import List, Dict, Set, Tuple
 
 import dxpy
 import numpy as np
@@ -9,14 +10,18 @@ import pandas as pd
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
 from general_utilities.job_management.command_executor import build_default_command_executor
 
+CMD_EXECUTOR = build_default_command_executor()
 
-def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict) -> Tuple[str, Path, Path]:
+
+def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, relatedness_file: dict) -> \
+        Tuple[str, Path, Path, Path]:
     """
     This function downloads the data we will need to run this module
 
     :param genetic_data_file: a file containing the genetic data file names and IDs
     :param sample_ids_file: a file containing the sample IDs
     :param ancestry_file: a file containing the ancestry sample IDs
+    :param relatedness_file: a file containing the relatedness matrix table
     :return: a tuple of the genetic data file, sample IDs file, and ancestry file
     """
     # Ingest the UKBB plink files (this also includes relatedness and snp/sample QC files)
@@ -29,52 +34,25 @@ def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_fi
     # Download wba file:
     ancestry_file = InputFileHandler(ancestry_file, download_now=True).get_file_handle()
 
-    return genetic_files, sample_ids_file, ancestry_file
+    # Download the relatedness files:
+    if relatedness_file is not None:
+        relatedness_file = InputFileHandler(relatedness_file, download_now=True).get_file_handle()
+
+    return genetic_files, sample_ids_file, ancestry_file, relatedness_file
 
 
-# Function simply merges all autosomal files together
-def merge_plink_files(genetic_files: str) -> str:
-    """
-    This function merges all autosomal files together. It is assumed that the files are named in a way that
-    they can be matched by the prefix 'genetic_files.name' and that they are all in the same directory.
-
-    :param genetic_files: the name of the genetic files to be merged
-    :return: the name of the merged file
-    """
-
-    genetic_files = Path.cwd() / genetic_files
-    output_stub = "Autosomes"
-    cmd_executor = build_default_command_executor()
-
-    # Merge autosomal PLINK files together:
-    # List all files matching the prefix
-    matching_files = list(Path('.').glob(f"{genetic_files.name}*"))
-
-    # Write the matching base names (with 'test/' prepended and without extensions) to merge_list.txt
-    with open('merge_list.txt', 'w') as merge_list:
-        # Use a set to remove duplicates
-        unique_base_names = {os.path.splitext(file.name)[0] for file in matching_files}
-        for base_name in sorted(unique_base_names):
-            merge_list.write(f"test/{base_name}\n")
-        # remove duplicates
-    cmd = f"plink2 --pmerge-list /test/merge_list.txt bfile --out /test/{output_stub}"
-    cmd_executor.run_cmd_on_docker(cmd)
-
-    return output_stub
-
-
-def download_genetic_data(genetic_data_file: Path) -> str:
+def download_genetic_data(input_file_list: Path) -> str:
     """
     This function downloads the genetic data files using input coordinates
 
-    :param genetic_data_file: a file containing the genetic data file names and IDs
+    :param input_file_list: a file containing the genetic data file names and IDs
     :return: stem of one of the files for downstream use
     """
     # we should have two columns in the genetic input file
     # the first column should be the filename
     # the second column should be the file ID
     # in total there should be 22 sets of .bed .bim .fam files
-    with open(genetic_data_file, 'r') as file:
+    with open(input_file_list, 'r') as file:
         lines = file.readlines()
         # check we have 22 chromosomes in sets of 3
         if len(lines) != 66:
@@ -99,20 +77,73 @@ def download_genetic_data(genetic_data_file: Path) -> str:
     return output.stem
 
 
-def calculate_relatedness(genetic_data_file: str) -> Path:
+def merge_plink_files(genetic_files: str, cmd_executor=CMD_EXECUTOR) -> str:
+    """
+    This function merges all autosomal files together. It is assumed that the files are named in a way that
+    they can be matched by the prefix 'genetic_files.name' and that they are all in the same directory.
+
+    :param genetic_files: the name of the genetic files to be merged
+    :param cmd_executor: a command executor object to run commands on the docker instance
+    :return: the name of the merged file
+    """
+
+    genetic_files = Path.cwd() / genetic_files
+    output_stub = "Autosomes"
+
+    # Merge autosomal PLINK files together:
+    # List all files matching the prefix
+    matching_files = list(Path('.').glob(f"{genetic_files.name}*"))
+
+    # Write the matching base names (with 'test/' prepended and without extensions) to merge_list.txt
+    with open('merge_list.txt', 'w') as merge_list:
+        # Use a set to remove duplicates
+        unique_base_names = {os.path.splitext(file.name)[0] for file in matching_files}
+        for base_name in sorted(unique_base_names):
+            merge_list.write(f"test/{base_name}\n")
+        # remove duplicates
+    cmd = f"plink2 --pmerge-list /test/merge_list.txt bfile --out /test/{output_stub}"
+    cmd_executor.run_cmd_on_docker(cmd)
+
+    return output_stub
+
+
+def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> Path:
     """
     This function calculates the relatedness of the samples in the genetic data file
 
     :param genetic_data_file: a path to the genetic data file
+    :param run_king: a boolean indicating whether to run KING for relatedness calculation
+    :param cmd_executor: a command executor object to run commands on the docker instance
     :return: a path to the relatedness file matrix
     """
 
-    cmd_executor = build_default_command_executor()
     genetic_data_file = Path.cwd() / genetic_data_file
     relatedness_db = "relatedness_table"
 
-    # Calculate relatedness using KING:
-    cmd = f"plink2 --pfile /test/{genetic_data_file.name} --make-king-table --out /test/{relatedness_db}"
+    # first we need to calculate the PCs
+    # as it takes a long time let's only do this if the file does not already exist
+    if not Path(f"{genetic_data_file.name}.eigenvec.allele").exists():
+        cmd = f"plink2 -pfile /test/{genetic_data_file.name} --pca 3 allele-wts --out /test/{genetic_data_file.name}"
+        cmd_executor.run_cmd_on_docker(cmd)
+
+    eigen_df = pd.read_csv(f"{genetic_data_file.name}.eigenvec.allele", sep='\t')
+    # print(eigen_df.head())
+    filtered_eigen_df = eigen_df[(eigen_df[['PC1', 'PC2', 'PC3']].abs() < 0.003).all(axis=1)]
+    weak_snps = filtered_eigen_df['ID'].unique()
+    # Save list
+    pd.Series(weak_snps).to_csv(f"{genetic_data_file.name}_eigen_filtered.txt", index=False, header=False)
+
+    # Filter variants for kinship analysis using PLINK2
+    cmd = (
+        f"plink2 --pfile test/{genetic_data_file.name} "
+        f"--extract test/{genetic_data_file.name}_eigen_filtered.txt "
+        f"--make-bed "
+        f"--out test/{genetic_data_file.name}_filtered_for_kinship"
+    )
+    cmd_executor.run_cmd_on_docker(cmd)
+
+    # # Calculate relatedness using KING:
+    cmd = f"plink2 --bfile /test/{genetic_data_file.name}_filtered_for_kinship --make-king-table --out /test/{relatedness_db}"
     cmd_executor.run_cmd_on_docker(cmd)
 
     with open(f"{relatedness_db}.kin0", 'r') as kin0_file:
@@ -133,7 +164,6 @@ def calculate_relatedness(genetic_data_file: str) -> Path:
     return Path(relatedness_output)
 
 
-# This is a helper function to get_individuals()
 def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> dict:
     """
     This function selects related individuals from the relatedness file and returns a dictionary with the
@@ -162,115 +192,150 @@ def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> di
     return {'rel': rel, 'rel_totals': rel_totals}
 
 
-# This function generates a list of related individuals and then generates various exclusions lists based on
-# relatedness and ancestry
-def get_individuals(sample_ids_file: Path, ancestry_file: Path, relatedness: Path) -> Tuple[
-    Set[str], List[dxpy.DXFile]]:
+def load_ancestry_dict(ancestry_file: Path) -> Dict[str, Set[str]]:
     """
-    This function generates a list of related individuals and then generates various exclusions lists based on
-    relatedness and ancestry
-
-    :param sample_ids_file: a file containing the sample IDs
+    This function loads the ancestry file and returns a dictionary
+     with ancestry as keys and sets of individual IDs as values.
     :param ancestry_file: a file containing the ancestry sample IDs and ancestry information
-    :param relatedness: a file containing the relatedness matrix table
-    :return: a tuple of the WES samples and a list of files to be uploaded to DNANexus
+    :return: a dictionary with ancestry as keys and sets of individual IDs as values
     """
     # Get WBA individuals
     # - Need to be able to generate some separate list of individuals
     # - This is the list generated by Felix to be a bit more inclusive
-    with Path(ancestry_file).open(mode='r') as ancestry_file:
-        ancestry_dict: Dict[str, Set[str]] = {'all': set()}
-        ancestry_reader = csv.DictReader(ancestry_file, delimiter="\t")
+    ancestry_dict: Dict[str, Set[str]] = {'all': set()}
+    with ancestry_file.open(mode='r') as ancestry_info:
+        ancestry_reader = csv.DictReader(ancestry_info, delimiter="\t")
         for indv in ancestry_reader:
+            eid = str(indv['n_eid'])
+            ancestry_dict['all'].add(eid)
             if indv['ancestry'] != "NA":
-                if indv['ancestry'] in ancestry_dict:
-                    ancestry_dict[indv['ancestry']].add(str(indv['n_eid']))
-                else:
-                    ancestry_dict[indv['ancestry']] = {str(indv['n_eid'])}
+                ancestry_dict.setdefault(indv['ancestry'], set()).add(eid)
+    return ancestry_dict
 
-            # Create an all category as well:
-            ancestry_dict['all'].add(str(indv['n_eid']))
 
-        ancestry_file.close()
+def load_samples(sample_ids_file: Path) -> Set[str]:
+    """
+    This function loads the sample IDs file and returns a set of individual IDs.
+    :param sample_ids_file: a file containing the sample IDs
+    :return: a set of individual IDs
+    """
+    # Read overall list of individuals with data so we can subset the genetic data.
+    with sample_ids_file.open('r') as wes_samp_file:
+        return {line.strip() for line in wes_samp_file if line.strip()}
 
-    # Read overall list of individuals with WES data so we can subset the genetic data.
-    wes_samp_file = open(sample_ids_file, 'r')
-    wes_samples = set()
-    for eid in wes_samp_file:
-        eid = eid.rstrip()
-        wes_samples.add(str(eid))
 
+def load_relatedness(relatedness: Path, wes_samples: Set[str]) -> pd.DataFrame:
+    """
+    This function loads the relatedness file and returns a DataFrame containing only the related individuals
+    :param relatedness:  a file containing the relatedness matrix table
+    :param wes_samples: a set of individual IDs that are WES samples
+    :return: a DataFrame containing only the related individuals
+    """
     # Calculate relateds:
     # Read the relatedness file in as a pandas DataFrame
     # dtype sets eids as characters
     # ID1 and ID2 are two spearate individuals that are related according to some kinship value
-    rel = pd.read_csv(relatedness.name,
-                      delim_whitespace=True,
-                      dtype={'ID1': np.str_, 'ID2': np.str_})
+    # Check if the file is empty
+    if relatedness.stat().st_size == 0:
+        return pd.DataFrame(columns=["ID1", "ID2", "Kinship"]).astype({"Kinship": "float64"})
 
-    # Remove individuals from the relatedness DataFrame not in WES data:
-    rel = rel[rel['ID1'].isin(wes_samples)]
-    rel = rel[rel['ID2'].isin(wes_samples)]
+    # Read the file and filter based on WES samples
+    rel = pd.read_csv(
+        relatedness,
+        delim_whitespace=True,
+        names=["ID1", "ID2", "Kinship"],
+        skiprows=1
+    )
+    return rel[(rel["ID1"].isin(wes_samples)) & (rel["ID2"].isin(wes_samples))]
 
+
+def get_relateds_to_remove(rel: pd.DataFrame) -> Set[str]:
+    """
+    This function identifies individuals to remove from the relatedness DataFrame based on their relatedness pairs.
+    :param rel: a pandas DataFrame containing the relatedness file
+    :return: a set of individual IDs to remove from the relatedness DataFrame
+    """
     # The relatedenss list is passed to the select_related_individuals() function for the first time so that we can
     # just calculate the number of times each individual occurs in the rel file after we limit to WES samples
     # parameter 1 is a pandas DataFrame
     # parameter 2 is a list of individuals we want to remove from parameter 1
-    returned = select_related_individual(rel, [])  # use an empty list first since we are just calculating totals
-    rel = returned['rel']
-    rel_totals = returned['rel_totals']
-
     relateds_to_remove = set()
-
-    # We now iterate until we have no more related pairs in the relatedness file (rel)
+    returned = select_related_individual(rel, [])
+    rel, rel_totals = returned['rel'], returned['rel_totals']
     while len(rel_totals) > 0:
-        # Remove the individual with the most relatedness pairs
-        samp_to_remove = rel_totals.iloc[len(rel_totals) - 1].name
-        relateds_to_remove.add(samp_to_remove)  # and add them to the list of related individuals we want to exclude
-
-        # And then remove that person from rel and recalculate per-individual totals and loop again
+        samp_to_remove = rel_totals.iloc[-1].name
+        relateds_to_remove.add(samp_to_remove)
         returned = select_related_individual(rel, [samp_to_remove])
-        rel = returned['rel']
-        rel_totals = returned['rel_totals']
+        rel, rel_totals = returned['rel'], returned['rel_totals']
+    return relateds_to_remove
 
-    # Get lists of WES samples to include specific to certain ancestries:
+
+def write_and_upload_ancestry_files(wes_samples: Set[str], ancestry_dict: Dict[str, Set[str]],
+                                    relateds_to_remove: Set[str]) -> List[dxpy.DXFile]:
+    """
+    This function writes ancestry-specific inclusion files for samples and uploads them to DNANexus.
+    :param wes_samples: a set of sample IDs
+    :param ancestry_dict: a dictionary with ancestry as keys and sets of individual IDs as values
+    :param relateds_to_remove: a set of individual IDs to remove from the relatedness DataFrame
+    :return: a list of DXFile objects representing the uploaded inclusion files
+    """
+
+    # Write ancestry-specific exclusion lists, relatedness, and combo of the two:
+    # 1. list of WES non-ancestry or related individuals
+    # 2. list of ancestry-specific individuals with WES
+    # 3. list of related individuals with WES
+
+    # Get lists of samples to include specific to certain ancestries:
     include_files = []
 
-    for ancestry in ancestry_dict.keys():
+    for ancestry in ancestry_dict:
+        pass_samples = wes_samples.intersection(ancestry_dict[ancestry])
+        pass_samples = pass_samples.difference(relateds_to_remove)
 
-        pass_samples = wes_samples.intersection(ancestry_dict[ancestry])  # gets WES samples that are ancestry-specific
-        pass_samples = pass_samples.difference(relateds_to_remove)  # gets unrelated samples
-
-        # Write ancestry-specific exclusion lists, relatedness, and combo of the two:
-        # 1. list of WES non-ancestry or related individuals
-        # 2. list of ancestry-specific individuals with WES
-        # 3. list of related individuals with WES
         unrelated_path = Path(f'INCLUDEFOR_{ancestry.upper()}_Unrelated.txt')
         related_path = Path(f'INCLUDEFOR_{ancestry.upper()}_Related.txt')
 
-        with unrelated_path.open('w') as ancestry_unrelated_inclusion_list, \
-                related_path.open('w') as ancestry_inclusion_list:
-
-            # This writes to each list based on a set of requirements
+        # This writes to each list based on a set of requirements
+        with unrelated_path.open('w') as unrelated_f, related_path.open('w') as related_f:
             for samp in wes_samples:
                 if samp in pass_samples:
-                    ancestry_unrelated_inclusion_list.write(samp + "\n")
+                    unrelated_f.write(f"{samp}\n")
                 if samp in ancestry_dict[ancestry]:
-                    ancestry_inclusion_list.write(samp + "\n")
+                    related_f.write(f"{samp}\n")
 
-            ancestry_unrelated_inclusion_list.close()
-            ancestry_inclusion_list.close()
+        include_files.extend([
+            dxpy.upload_local_file(unrelated_path.name),
+            dxpy.upload_local_file(related_path.name)
+        ])
 
-            # Upload to DNANexus
-            include_files.extend(
-                [dxpy.upload_local_file(unrelated_path.name), dxpy.upload_local_file(related_path.name)])
+    return include_files
 
+
+def get_individuals(sample_ids_file: Path, ancestry_file: Path, relatedness: Path) -> Tuple[
+    Set[str], List[dxpy.DXFile]]:
+    """
+    Generates a list of unrelated individuals for each ancestry and uploads inclusion files to DNANexus.
+
+    :param sample_ids_file: a file containing the sample IDs
+    :param ancestry_file: a file containing ancestry sample IDs and ancestry info
+    :param relatedness: a file with relatedness matrix
+    :return: a tuple of samples and uploaded DXFiles
+    """
+    ancestry_dict = load_ancestry_dict(ancestry_file)
+    wes_samples = load_samples(sample_ids_file)
+    rel = load_relatedness(relatedness, wes_samples)
+    relateds_to_remove = get_relateds_to_remove(rel)
+    include_files = write_and_upload_ancestry_files(wes_samples, ancestry_dict, relateds_to_remove)
     return wes_samples, include_files
 
 
-# Calculate per-snp missingness for filtering purposes:
-def calculate_missingness(merged_filename: str) -> dict:
-    cmd_executor = build_default_command_executor()
+def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> dict:
+    """
+    This function calculates the missingness of the SNPs in the merged plink file
+    :param merged_filename: a file containing the merged plink file
+    :param cmd_executor: a command executor object to run commands on the docker instance
+    :return: a dictionary with SNP IDs as keys and their missingness as values
+    """
     merged_data_file = Path.cwd() / merged_filename
     missingness_db = "missingness_out"
 
@@ -289,7 +354,6 @@ def calculate_missingness(merged_filename: str) -> dict:
     return missingness
 
 
-# Check per-SNP and per-sample quality control
 def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps_qc_v2: Path) -> Tuple[Path, Path]:
     """
     This function checks the quality control of the SNPs and samples in the genetic data file
@@ -301,7 +365,6 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     :return: a tuple of the pass SNPs file and the pass samples file
     """
 
-    cmd_executor = build_default_command_executor()
     pass_snps_file = Path("pass_snps.txt")
 
     # Read in UKBiobank provided quality control for SNPs
@@ -331,9 +394,9 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     pass_snps.close()
 
     # Have to generate a pasted version of the sample QC file with the fam file to get useable sample IDs:
-    cmd = f'paste -d " " {ukb_snps_qc_v2} > ukb_sqc_v2.with_fam.txt'
-    cmd_executor.run_cmd_on_docker(cmd)
-
+    ukb_sqc_v2_with_fam = Path("ukb_sqc_v2_with_fam.txt")
+    cmd = f'paste -d " " {ukb_snps_qc_v2} > {ukb_sqc_v2_with_fam}'
+    subprocess.run(cmd, shell=True)
     # Check sample QC files:
     # Here generating a header that mashes together the two files above
     smp_qc_header = ['ID1', 'ID2', 'null1', 'null2', 'fam.gender', 'batch1',
@@ -345,7 +408,7 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     smp_qc_header.extend(["PC%d" % item for item in range(1, 41)])
     smp_qc_header.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
 
-    smp_qc = csv.DictReader(open('ukb_sqc_v2.with_fam.txt', 'r'), delimiter=" ", fieldnames=smp_qc_header)
+    smp_qc = csv.DictReader(open(f'{ukb_sqc_v2_with_fam}', 'r'), delimiter=" ", fieldnames=smp_qc_header)
     # write pass IDs as a file:
     pass_samples = Path("pass_samples.txt")
     wr_file = open(pass_samples, 'w')
@@ -397,18 +460,18 @@ def check_qc_other(snp_qc_file: Path, sample_qc_file: Path) -> Tuple[Path, Path]
     return output_snps, output_samples
 
 
-# Now apply filtering based on lists that we made above
-def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = None) -> Tuple[Path, Path]:
+def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = None, cmd_executor=CMD_EXECUTOR) -> Tuple[
+    Path, Path]:
     """
     This function filters the merged plink file based on the pass SNPs and pass samples files
 
     :param merged_filename: a file containing the merged plink file
     :param pass_snps: a file containing the pass SNPs
     :param pass_samples: a file containing the pass samples
+    :param cmd_executor: a command executor object to run commands on the docker instance
     :return: a path to the filtered merged plink file and a path to the low MAC SNPs file
     """
 
-    cmd_executor = build_default_command_executor()
     merged_data_file = Path.cwd() / merged_filename
     snplist = Path(merged_data_file.name).with_suffix(".low_MAC.snplist")
 
@@ -424,8 +487,7 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
     return merged_data_file, snplist
 
 
-# This is a helper function for building GRMs to ensure that the resulting matrix is lower-left
-def column_swap(col1, col2):
+def column_swap(col1: str, col2: str) -> Tuple[str, str]:
     """
     This function swaps the columns of a matrix to ensure that the resulting matrix is lower-left
 
@@ -439,11 +501,11 @@ def column_swap(col1, col2):
         return col1, col2
 
 
-# We use the KING-relate derived relatedness information for our GRM. Just need to convert it into a format that
-# SAIGE and STAAR can use...
 def make_grm(wes_samples: set, rel_mtx: Path) -> Tuple[Path, Path]:
     """
     This function generates a GRM from the WES samples and the relatedness matrix
+    We use the KING-relate derived relatedness information for our GRM. Just need to convert it into a format that
+    SAIGE and STAAR can use...
 
     :param wes_samples: a set of WES samples
     :param rel_mtx: a file containing the relatedness matrix table
