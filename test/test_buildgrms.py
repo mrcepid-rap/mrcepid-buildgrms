@@ -306,7 +306,7 @@ def test_calculate_missingness(merged_filename):
     # Assuming calculate_missingness is a function that takes this parameter
     missingness = calculate_missingness(merged_filename)
 
-    assert missingness is not None
+    assert len(missingness) == 678205
 
 
 @pytest.mark.parametrize(
@@ -333,6 +333,9 @@ def test_filter_plink(filepath, snp_qc, sample_qc):
     assert (final_genetic_file.with_suffix(".bed")).exists()
     assert (final_genetic_file.with_suffix(".bim")).exists()
     assert (final_genetic_file.with_suffix(".fam")).exists()
+
+    assert len(final_genetic_file.with_suffix(".fam").read_text().splitlines()) == 10000
+    assert len(final_genetic_file.with_suffix(".bim").read_text().splitlines()) == 17919
 
 
 @pytest.mark.parametrize(
