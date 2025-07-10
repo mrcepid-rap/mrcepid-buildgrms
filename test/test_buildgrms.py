@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
 
-from build_grms.grm_tools.grm_toolkit import ingest_resources, download_genetic_data, merge_plink_files, \
+from buildgrms.grm_tools.grm_toolkit import ingest_resources, download_genetic_data, merge_plink_files, \
     calculate_relatedness, get_individuals, calculate_missingness, filter_plink, select_related_individual, \
     column_swap, check_qc_ukb, load_ancestry_dict, load_samples, load_relatedness, get_relateds_to_remove
 

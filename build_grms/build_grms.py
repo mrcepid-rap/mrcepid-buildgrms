@@ -14,7 +14,7 @@ import dxpy
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler, FileType
 from general_utilities.mrc_logger import MRCLogger
 
-from build_grms.grm_tools.grm_toolkit import ingest_resources, merge_plink_files, get_individuals, calculate_missingness, \
+from buildgrms.grm_tools.grm_toolkit import ingest_resources, merge_plink_files, get_individuals, calculate_missingness, \
     check_qc_ukb, filter_plink, make_grm, calculate_relatedness, check_qc_other
 
 LOGGER = MRCLogger().get_logger()
