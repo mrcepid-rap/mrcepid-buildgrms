@@ -3,7 +3,7 @@
   "title": "BuildGRMs",
   "summary": "Generates a variety of Relatedness Matrices for various burden testing methods",
   "dxapi": "1.0.0",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "openSource": true,
   "inputSpec": [
     {
@@ -31,28 +31,28 @@
       "name": "snp_qc",
       "label": "A SNP QC file for inclusion/exclusion of variants.",
       "class": "file",
-      "optional": false,
+      "optional": true,
       "help": "This file should contain variant-level QC information from the sequencing experiments."
     },
     {
       "name": "sample_qc",
       "label": "A sample QC file for inclusion/exclusion of samples.",
       "class": "file",
-      "optional": false,
+      "optional": true,
       "help": "This file should contain any sample-level QC information from the sequencing experiments."
     },
     {
       "name": "ukb_snp_qc",
       "label": "List of individuals with assigned ancestry status.",
       "class": "file",
-      "optional": false,
+      "optional": true,
       "help": "This is a UK Biobank specific snp QC file. It's only required when using the UK Biobank data."
     },
     {
       "name": "ukb_snps_qc_v2",
       "label": "This is an additional UK Biobank specific snp QC file.",
       "class": "file",
-      "optional": false,
+      "optional": true,
       "help": "This is an additional UK Biobank specific snp QC file. It's only required when using the UK Biobank data."
     },
     {
@@ -155,7 +155,7 @@
         "name": "mrcepid-buildgrms",
         "package_manager": "git",
         "url": "https://github.com/mrcepid-rap/mrcepid-buildgrms.git",
-        "tag": "main",
+        "tag": "v1.0.1",
         "build_commands": "uv pip install --system ."
       }
     ]

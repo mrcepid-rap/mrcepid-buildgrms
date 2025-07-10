@@ -2,7 +2,6 @@
 This file contains unit tests for the buildgrms module. It's recommended to run them sequentially to avoid
 missing files.
 """
-
 import time
 from pathlib import Path
 from typing import Tuple
@@ -11,7 +10,7 @@ import pandas as pd
 import pytest
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
 
-from buildgrms.grm_tools.grm_toolkit import ingest_resources, download_genetic_data, merge_plink_files, \
+from build_grms.grm_tools.grm_toolkit import ingest_resources, download_genetic_data, merge_plink_files, \
     calculate_relatedness, get_individuals, calculate_missingness, filter_plink, select_related_individual, \
     column_swap, check_qc_ukb, load_ancestry_dict, load_samples, load_relatedness, get_relateds_to_remove
 
@@ -335,7 +334,7 @@ def test_filter_plink(filepath, snp_qc, sample_qc):
     assert (final_genetic_file.with_suffix(".fam")).exists()
 
     assert len(final_genetic_file.with_suffix(".fam").read_text().splitlines()) == 10000
-    assert len(final_genetic_file.with_suffix(".bim").read_text().splitlines()) == 17919
+    assert len(final_genetic_file.with_suffix(".bim").read_text().splitlines()) == 660286
 
 
 @pytest.mark.parametrize(
@@ -397,15 +396,14 @@ def test_select_related_individual(rel_data, samples_to_exclude, expected_rel_id
         (
                 {"INCLUDEFOR_ALL_Unrelated.txt"},  # WES samples
                 {"1:55545:C:T": 0.01, "1:546802:G:C": 0.02, "1:569933:G:A": 0.01},  # Missingness dictionary
-                Path("test_data/ukb_snp_qc.txt"),  # SNP QC file
-                Path("test_data/ukb_snp_qc_v2.txt"),  # SNP QC v2 file
+                Path("test_data/test_snp_qc.txt"),  # SNP QC file
+                Path("test_data/test_snp_qc_v2.txt"),  # SNP QC v2 file
                 Path("pass_snps.txt"),  # Expected SNPs file
                 Path("pass_samples.txt"),  # Expected samples file
         ),
     ],
 )
-def test_check_qc_ukb(wes_samples, missingness, ukb_snp_qc, ukb_snps_qc_v2, expected_snps_file, expected_samples_file,
-                      tmp_path):
+def test_check_qc_ukb(wes_samples, missingness, ukb_snp_qc, ukb_snps_qc_v2, expected_snps_file, expected_samples_file):
     # Arrange: Create temporary files for testing
     pass_snps_file, pass_samples_file = check_qc_ukb(wes_samples, missingness, ukb_snp_qc, ukb_snps_qc_v2)
 

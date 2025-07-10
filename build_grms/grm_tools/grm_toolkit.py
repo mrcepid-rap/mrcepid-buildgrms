@@ -354,7 +354,8 @@ def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> di
     return missingness
 
 
-def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps_qc_v2: Path) -> Tuple[Path, Path]:
+def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps_qc_v2: Path,
+                 cmd_executor=CMD_EXECUTOR) -> Tuple[Path, Path]:
     """
     This function checks the quality control of the SNPs and samples in the genetic data file
 
@@ -362,6 +363,7 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     :param missingness: a dictionary of SNP IDs and their missingness values
     :param ukb_snp_qc: a file containing the SNP QC information
     :param ukb_snps_qc_v2: a file containing the SNP QC information version 2
+    :param cmd_executor: Command Executor for running commands on Docker
     :return: a tuple of the pass SNPs file and the pass samples file
     """
 
@@ -399,16 +401,16 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     subprocess.run(cmd, shell=True)
     # Check sample QC files:
     # Here generating a header that mashes together the two files above
-    smp_qc_header = ['ID1', 'ID2', 'null1', 'null2', 'fam.gender', 'batch1',
+    snp_qc_header = ['ID1', 'ID2', 'null1', 'null2', 'fam.gender', 'batch1',
                      'affyID1', 'affyID2', 'array', 'batch2', 'plate', 'well',
                      'call.rate', 'dQC', 'dna.conc', 'sub.gender', 'inf.gender',
                      'x.int', 'y.int', 'plate.sub', 'well.sub', 'missing.rate',
                      'het', 'het.pc.corr', 'het.missing.outliers', 'aneuploidy', 'in.kinship',
                      'excl.kinship', 'excess.relatives', 'in.wba', 'used.pc']
-    smp_qc_header.extend(["PC%d" % item for item in range(1, 41)])
-    smp_qc_header.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
+    snp_qc_header.extend(["PC%d" % item for item in range(1, 41)])
+    snp_qc_header.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
 
-    smp_qc = csv.DictReader(open(f'{ukb_sqc_v2_with_fam}', 'r'), delimiter=" ", fieldnames=smp_qc_header)
+    snp_qc = csv.DictReader(open(ukb_sqc_v2_with_fam, 'r'), delimiter=" ", fieldnames=snp_qc_header)
     # write pass IDs as a file:
     pass_samples = Path("pass_samples.txt")
     wr_file = open(pass_samples, 'w')
@@ -417,7 +419,7 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     # 1. In the WES samples
     # 2. Are not missingness outliers
     # 3. Are included in autosomal phasing
-    for sample in smp_qc:
+    for sample in snp_qc:
         if sample['ID1'] in wes_samples \
                 and sample['het.missing.outliers'] == "0" \
                 and sample['in.phasing.auto'] == "1" \

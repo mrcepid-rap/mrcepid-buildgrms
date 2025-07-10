@@ -14,7 +14,7 @@ import dxpy
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler, FileType
 from general_utilities.mrc_logger import MRCLogger
 
-from buildgrms.grm_tools.grm_toolkit import ingest_resources, merge_plink_files, get_individuals, calculate_missingness, \
+from build_grms.grm_tools.grm_toolkit import ingest_resources, merge_plink_files, get_individuals, calculate_missingness, \
     check_qc_ukb, filter_plink, make_grm, calculate_relatedness, check_qc_other
 
 LOGGER = MRCLogger().get_logger()
@@ -27,6 +27,10 @@ def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, sn
                                                                      sample_ids_file,
                                                                      ancestry_file,
                                                                      relatedness_file)
+
+    if (snp_qc and sample_qc) is None and (ukb_snp_qc and ukb_snps_qc_v2) is None:
+        raise ValueError(
+            "Either both SNP QC and Sample QC files, or both UKB SNP QC files must be provided. Please check your input files.")
 
     # merge autosomal plink files together
     merged_filename = merge_plink_files(genetic_files)

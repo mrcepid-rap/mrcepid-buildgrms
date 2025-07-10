@@ -6,7 +6,7 @@ uv.lock
 buildgrms.egg-info
 .DS_Store
 test/.DS_Store
-buildgrms/__pycache__/
+build_grms/__pycache__/
 test/__pycache__/
-buildgrms/grm_tools/__pycache__/
+build_grms/grm_tools/__pycache__/
 .venv
