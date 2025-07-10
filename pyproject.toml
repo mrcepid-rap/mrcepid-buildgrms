@@ -1,0 +1,22 @@
+[project]
+name = "buildgrms"
+version = "0.1.0"
+description = ""
+authors = [
+  { name = "Alish Palmos", email = "alish.palmos@insmed.com" }
+    ]
+readme = "README.md"
+requires-python = ">=3.8,<3.9"
+dependencies = [
+    "dxpy==0.346.0",
+    "pandas==1.5.2",
+    "numpy==1.23.2",
+    "general-utilities @ git+https://github.com/mrcepid-rap/general_utilities.git@main"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["buildgrms"]

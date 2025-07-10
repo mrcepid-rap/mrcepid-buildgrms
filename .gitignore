@@ -1,0 +1,12 @@
+poetry.lock
+.idea
+test/test_data
+build
+uv.lock
+buildgrms.egg-info
+.DS_Store
+test/.DS_Store
+buildgrms/__pycache__/
+test/__pycache__/
+buildgrms/grm_tools/__pycache__/
+.venv

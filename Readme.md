@@ -7,30 +7,32 @@ https://documentation.dnanexus.com/.
 ### Table of Contents
 
 - [Introduction](#introduction)
-  * [Background](#background)
-  * [Dependencies](#dependencies)
-    + [Docker](#docker)
-    + [Resource Files](#resource-files)
+    * [Background](#background)
+    * [Dependencies](#dependencies)
+        + [Docker](#docker)
+        + [Resource Files](#resource-files)
 - [Methodology](#methodology)
-  * [1. Selecting Individuals](#1-selecting-individuals)
-  * [2. Perform Genotyping QC](#2-perform-genotyping-qc)
-  * [3. Perform Filtering](#3-perform-filtering)
-  * [4. Make a GRM](#4-make-a-grm)
+    * [1. Selecting Individuals](#1-selecting-individuals)
+    * [2. Perform Genotyping QC](#2-perform-genotyping-qc)
+    * [3. Perform Filtering](#3-perform-filtering)
+    * [4. Make a GRM](#4-make-a-grm)
 - [Running on DNANexus](#running-on-dnanexus)
-  * [Inputs](#inputs)
-    + [Sample IDs File](#sample-ids-file)
-    + [WBA File](#ancestry-file)
-  * [Outputs](#outputs)
-  * [Command line example](#command-line-example)
-    + [Batch Running](#batch-running)
+    * [Inputs](#inputs)
+        + [Sample IDs File](#sample-ids-file)
+        + [WBA File](#ancestry-file)
+    * [Outputs](#outputs)
+    * [Command line example](#command-line-example)
+        + [Batch Running](#batch-running)
 
 ## Introduction
 
 This applet performs several tasks related to the genotyping data provided by UKBiobank for the purposes of generating
-genetic relatedness matrices (GRMs) during rare variant burden testing. This applet should only ever need to be run once.
+genetic relatedness matrices (GRMs) during rare variant burden testing. This applet should only ever need to be run
+once.
 However, I am documenting here how it is run and the filtering approaches applied for the purposes of transparency.
 
-This README makes use of DNANexus file and project naming conventions. Where applicable, an object available on the DNANexus
+This README makes use of DNANexus file and project naming conventions. Where applicable, an object available on the
+DNANexus
 platform has a hash ID like:
 
 * file – `file-1234567890ABCDEFGHIJKLMN`
@@ -42,16 +44,19 @@ Information about files and projects can be queried using the `dx describe` tool
 dx describe file-1234567890ABCDEFGHIJKLMN
 ```
 
-**Note:** This README pertains to data included as part of the DNANexus project "MRC - Variant Filtering" (project-G2XK5zjJXk83yZ598Z7BpGPk)
+**Note:** This README pertains to data included as part of the DNANexus project "MRC - Variant Filtering" (
+project-G2XK5zjJXk83yZ598Z7BpGPk)
 
 ### Background
 
-Most rare variant burden tools require genotyping data to generate GRMs to control for cryptic population structure. Here,
+Most rare variant burden tools require genotyping data to generate GRMs to control for cryptic population structure.
+Here,
 I have developed an applet that:
 
 1. Gets genetic data into the required formats for various rare variant burden tools
-2. Sets exclusion/inclusion lists for individuals based on genetic ancestry and/or relatedness 
-3. Computes a GRM for the tool [SAIGE-GEN](https://github.com/weizhouUMICH/SAIGE/wiki/Genetic-association-tests-using-SAIGE)
+2. Sets exclusion/inclusion lists for individuals based on genetic ancestry and/or relatedness
+3. Computes a GRM for the
+   tool [SAIGE-GEN](https://github.com/weizhouUMICH/SAIGE/wiki/Genetic-association-tests-using-SAIGE)
 
 ### Dependencies
 
@@ -62,34 +67,41 @@ launched by DNANexus. The Dockerfile used to build dependencies is available as 
 
 https://github.com/mrcepid-rap/dockerimages/blob/main/associationtesting.Dockerfile
 
-This Docker image is built off of a 20.04 Ubuntu distribution with miniconda3 pre-installed available via [dockerhub](https://hub.docker.com/r/continuumio/miniconda3).
+This Docker image is built off of a 20.04 Ubuntu distribution with miniconda3 pre-installed available
+via [dockerhub](https://hub.docker.com/r/continuumio/miniconda3).
 This was done to remove issues with installing miniconda3 via Dockerfile which is a dependancy of CADD. This image is
-very light-weight and only provides basic OS installation and miniconda3. Other basic software (e.g. wget, make, and gcc)
+very light-weight and only provides basic OS installation and miniconda3. Other basic software (e.g. wget, make, and
+gcc)
 need to be installed manually. For more details on how to build a Docker image for use on the UKBiobank RAP, please see:
 
 https://github.com/mrcepid-rap#docker-images
 
-The only external tool that this applet requires from this Docker image is [plink2](https://www.cog-genomics.org/plink/2.0/).
+The only external tool that this applet requires from this Docker image
+is [plink2](https://www.cog-genomics.org/plink/2.0/).
 
 This statement is not exhaustive and does not include dependencies of dependencies and software needed
 to acquire other resources (e.g. wget). See the referenced Dockerfile for more information.
 
 #### Resource Files
 
-This app also makes use of several genetics resource files generated by UKBiobank with specific directories/files listed here:
+This app also makes use of several genetics resource files generated by UKBiobank with specific directories/files listed
+here:
 
-* UKBiobank genotypes - `/Bulk/Genotype Results/Genotype calls/ukb22418_c*`
+* UKBiobank genotypes - `/Bulk/Genotype Results/Genotype calls/ukb22418_c*` (check formatting below)
 * UKBiobank pre-computed relatedness – `/Bulk/Genotype Results/Genotype calls/ukb_rel.dat`
 * UKBiobank SNP QC – `/Bulk/Genotype Results/Genotype calls/ukb_snp_qc.txt`
 * UKBiobank Sample QC - `/Bulk/Genotype Results/Genotype calls/ukb_sqc_v2.txt`
-* UKBiobank ChrY WES VCF – `/Bulk/Exome sequences/Population level exome OQFE variants, pVCF format/ukb23156_c24_b0_v1.vcf.gz`
-   * This is to get a quick list of individuals with WES data
-* WBA Phenotype – `/project_resources/genetics/wba.txt`
-   * This file was generated by Felix Day to represent a "better" collection of white European ancestry individuals
+* UKBiobank ChrY WES VCF –
+  `/Bulk/Exome sequences/Population level exome OQFE variants, pVCF format/ukb23156_c24_b0_v1.vcf.gz`
+    * This is to get a quick list of individuals with WES data
+* WBA Phenotype –
+    * This file was generated by Felix Day to represent a "better" collection of white European ancestry individuals
+    * UK Biobank [provides a precomputed](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006) European ancestry definition for all UK Biobank participants.
 
 ## Methodology
 
-This applet is a supplementary applet (mrc-buildgrm) to the rare variant testing pipeline developed by Eugene Gardner for the UKBiobank
+This applet is a supplementary applet (mrc-buildgrm) to the rare variant testing pipeline developed by Eugene Gardner
+for the UKBiobank
 RAP at the MRC Epidemiology Unit:
 
 ![](https://github.com/mrcepid-rap/.github/blob/main/images/RAPPipeline.v3.png)
@@ -110,28 +122,30 @@ bcftools query -l ukb23156_c24_b0_v1.vcf.gz > wes_samples.txt
 ```
 
 2. Relatedness to other participants
-   
+
 We use the relatedness file pre-computed by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z) provided
 on the RAP as `ukb_rel.dat`. In brief, we:
 
 + remove individuals who do not have WES from this file
-+ calculate the number of times a given individual occurs within the file 
++ calculate the number of times a given individual occurs within the file
 + Remove the individual with the most relatedness pairs.
 + Repeat until no relatedness pairs are left
 
 3. Genetic ancestry
 
 Felix Day from the MRC-Epidemiology Unit provided a method to identify individuals of European ancestry. This list
-is more inclusive than that provided by UK Biobank as part of [field 22006](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006)
-on the UK Biobank data showcase. I have extended this method to also generate lists of South Asian and African genetic 
+is more inclusive than that provided by UK Biobank as part
+of [field 22006](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006)
+on the UK Biobank data showcase. I have extended this method to also generate lists of South Asian and African genetic
 ancestry individuals. For each population two files are generated:
 
 1. A list of participants specific to that ancestry group, including related samples (`INCLUDEFOR_{POP}_Related.txt`)
-2. A list of participants specific to that ancestry group, not including related samples (`INCLUDEFOR_{POP}_Unrelated.txt`)
+2. A list of participants specific to that ancestry group, not including related samples (
+   `INCLUDEFOR_{POP}_Unrelated.txt`)
 
 ### 2. Perform Genotyping QC
 
-We next perform quality control of SNPs and Samples in the main genotyping files provided by UK Biobank 
+We next perform quality control of SNPs and Samples in the main genotyping files provided by UK Biobank
 (e.g. `/Bulk/Genotype Results/Genotype calls/ukb22418_c*`).
 
 We include SNPs based on the following parameters where the SNP is:
@@ -139,9 +153,11 @@ We include SNPs based on the following parameters where the SNP is:
 1. Included on both the standard and BiLEVE array
 2. Autosomal
 3. Missingness < 5%. Missingness is calculated using plink2 like:
+
 ```commandline
 plink2 --missing 'variant-only' --pfile UKBB_500K_Autosomes --out UKBB_500K_Autosomes
 ```
+
 4. Passes QC on all individual standard and BiLEVE arrays
 5. Are not monomorphic
 
@@ -162,42 +178,47 @@ plink2 --mac 1 --pfile /test/UKBB_500K_Autosomes --make-bed \
         --out /test/UKBB_450K_Autosomes_QCd
 ```
 
-We also generate a list of low minor-allele count sites (MAC ≤ 100) to exclude when running BOLT here. 
+We also generate a list of low minor-allele count sites (MAC ≤ 100) to exclude when running BOLT here.
 
-### 4. Make a GRM 
+### 4. Make a GRM
 
-We again use the relatedness file pre-computed by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z) provided
-on the RAP as `ukb_rel.dat`. We simply convert this into a sparse matrix that can be read by the R package [Matrix](https://cran.r-project.org/web/packages/Matrix/index.html)
+We again use the relatedness file pre-computed by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z)
+provided
+on the RAP as `ukb_rel.dat`. We simply convert this into a sparse matrix that can be read by the R
+package [Matrix](https://cran.r-project.org/web/packages/Matrix/index.html)
 and include all individuals matched with themselves (e.g. the diagonal of the matrix) with a kinship coefficient of 0.5
 (e.g. the kinship of identical twins).
+
+*Note: that if you do not have a relatedness file (this should only really be on a non-UK Biobank platform), you can
+run this applet without the `relatedness_file` parameter. This will result in a relatedness matrix being constructed
+using plink,
+following the same steps as in UK Biobank QC documents.*
 
 ## Running on DNANexus
 
 ### Inputs
 
-This tool has two primary inputs. Please see below for example commands/workflows to generate required inputs.
+This tool has a number of primary inputs. Please see below for example commands/workflows to generate required inputs.
 
-| input           | description                                                                                                   |
-|-----------------|---------------------------------------------------------------------------------------------------------------|
-| sample_ids_file | List of sample IDs for current application with one sample ID per line.                                       |
-| ancestry_file   | List of individuals with predominately European ancestry for current application with one sample ID per line. |
+#### genetic_data_file
 
-There is also one default input that can be changed if necessary.
+This file should be a text file (no header) containing the name and location of all the genetic data files needed to run
+this applet.
+For example:
 
-| input                | description                                                                                                                                                                    | default                                  |
-|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------|
-| genetic_data_folder  | The location of the genetic data folder on the RAP. This has been set to the default folder on the UKBB RAP that holds the genetic data on project creation as of August 2022. | `/Bulk/Genotype Results/Genotype calls/` |
+| Filename | File ID         |
+|----------|-----------------|
+| chr1.bed | file-abcde12345 |
+| chr1.fam | file-abcde12345 |
+| chr1.bim | file-abcde12345 |
+| chr2.bed | file-abcde12345 |
+| chr2.fam | file-abcde12345 |
+| chr2.bim | file-abcde12345 |
 
-`genetic_data_folder` **MUST** contain the following files:
+#### sample_ids_file
 
-1. A binary plink format set of files (bed/bim/fam) for each chromosome with the following name: `ukb22418_c[\dXY]{1,2}_b0_v2.*`
-2. A sparse relatedness matrix (`ukb_rel.dat`)
-3. The two versions of the SNP quality control file (`ukb_snp_qc.txt` & `ukb_sqc_v2.txt`)
-
-#### Sample IDs File
-
-This file is a simple list of samples for which WES is available. The following command generates the correct file without
-any additional modifications:
+This file is a simple list of samples for which WES is available. The following command generates the correct file
+without any additional modifications:
 
 ```shell
 bcftools query -l ukb23157_cY_b0_v1.vcf.gz
@@ -205,23 +226,25 @@ bcftools query -l ukb23157_cY_b0_v1.vcf.gz
 
 Theoretically any raw vcf.gz can be used, but the chrY vcf was used since it is the fastest to download.
 
-#### Ancestry File
+#### ancestry_file
 
-The file of genetic ancestries can be defined based on user preference. UK Biobank [provides a precomputed](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006) 
+The file of genetic ancestries can be defined based on user preference. UK Biobank [provides a precomputed](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=22006)
 European ancestry definition for all UK Biobank participants. We have decided to generate a broader definition of
-genetic ancestry to allow for more samples to be included in our models. Generation of this file involves the 
+genetic ancestry to allow for more samples to be included in our models. Generation of this file involves the
 following steps:
 
-1. Extract PC1 - PC4 and self-reported ethnicity field [21000](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=21000). 
+1. Extract PC1 - PC4 and self-reported ethnicity
+   field [21000](https://biobank.ndph.ox.ac.uk/showcase/field.cgi?id=21000).
    Precomputed PCs were made available by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z).
    PCs were extracted from the RAP UKBB database and imported into R.
-2. Calculate a wider set of samples to include than Bycroft et al. The flagship UKBB paper selected a more constrained 
+2. Calculate a wider set of samples to include than Bycroft et al. The flagship UKBB paper selected a more constrained
    set of individuals. We have decided to identify a slightly more inclusive set of individuals:
-      1. Use k-means clustering on the first 4 PCs to define broader groupings
-      2. Use self-reported ethnicity to 'confirm' these findings and exclude individuals that do not fit into one of 
-         European, South Asian, or African groupings. Individuals that do not fit are given a value of 'NA' and are mostly 
-         individuals that report mixed background.
-3. Write a file of individuals with the definition defined above in the following **space-delimited** format. Case of the labels
+    1. Use k-means clustering on the first 4 PCs to define broader groupings
+    2. Use self-reported ethnicity to 'confirm' these findings and exclude individuals that do not fit into one of
+       European, South Asian, or African groupings. Individuals that do not fit are given a value of 'NA' and are mostly
+       individuals that report mixed background.
+3. Write a file of individuals with the definition defined above in the following **space-delimited** format. Case of
+   the labels
    does not affect downstream processing:
 
 ```text
@@ -233,24 +256,45 @@ n_eid ancestry
 2472374 eur
 ```
 
-The first line is a header, while the following lines represent an individual with European (eur), unknown, south-Asian (sas), 
-African (afr), and European (eur) genetic ancestry, respectively. Only the (case-nonspecific) values of 'eur', 'sas', 'afr', or 'NA' are 
+The first line is a header, while the following lines represent an individual with European (eur), unknown,
+south-Asian (sas),
+African (afr), and European (eur) genetic ancestry, respectively. Only the (case-nonspecific) values of 'eur', 'sas', '
+afr', or 'NA' are
 accepted. More information on how to generate this file is available in the [QC Workflow repository](https://github.com/mrcepid-rap/QC_workflow).
+
+#### ukb_snps_qc & ukb_snp_qc_v2
+
+If using UK Biobank data, there are two SNP QC files that you need: `ukb_snp_qc.txt` and `ukb_sqc_v2.txt`. These should
+be available in the `/Bulk` directory, or via the UK Biobank RAP.
+
+#### relatedness_file
+
+A sparse relatedness matrix (`ukb_rel.dat`) for the UK Biobank. This file is pre-computed
+by [Bycroft et al.](https://www.nature.com/articles/s41586-018-0579-z)
+and is provided on the RAP.
+
+#### snp_qc (optional)
+
+If using a non-UK Biobank dataset, this file should contain a set of SNPs that you want to include in the analysis.
+
+#### sample_qc (optional)
+
+If using a non-UK Biobank dataset, this file should contain a set of samples that you want to include in the analysis.
 
 ### Outputs
 
-All outputs have pre-determined names that cannot be changed on the command line. The file names are documented in the 
+All outputs have pre-determined names that cannot be changed on the command line. The file names are documented in the
 output table here:
 
-| output           | description                                                                                                                                                                                                                 | file name                                                  |
-|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|
-| output_pgen      | SNP/Sample-filtered autosomal plink format file from [step 3](#3-perform-filtering) above                                                                                                                                   | `UKBB_450K_Autosomes_QCd.bed`                              |
-| output_psam      | Associated sample file                                                                                                                                                                                                      | `UKBB_450K_Autosomes_QCd.fam`                              |
-| output_pvar      | Associated variant file                                                                                                                                                                                                     | `UKBB_450K_Autosomes_QCd.bim`                              |
-| inclusion_lists  | Inclusion lists for selecting individuals during association testing. By default, generates two files, one for related samples and one for unrelated samples, for the three subpopulations (AFR, SAS, EUR) and ALL samples. | `INCLUDEFOR_{POP}_Related.txt`                             |
-| grm              | SAIGE-compatible GRM from [step4](#4-make-a-grm-compatible-with-saige) above                                                                                                                                                | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx`               |
-| grm_samp         | Associated .sample file                                                                                                                                                                                                     | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt` |
-| snp_list         | List of low MAC SNPs to exclude from BOLT from [step3](#3-perform-filtering) above                                                                                                                                          | `UKBB_450K_Autosomes_QCd.low_MAC.snplist`                  |
+| output          | description                                                                                                                                                                                                                 | file name                                                  |
+|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|
+| output_pgen     | SNP/Sample-filtered autosomal plink format file from [step 3](#3-perform-filtering) above                                                                                                                                   | `UKBB_450K_Autosomes_QCd.bed`                              |
+| output_psam     | Associated sample file                                                                                                                                                                                                      | `UKBB_450K_Autosomes_QCd.fam`                              |
+| output_pvar     | Associated variant file                                                                                                                                                                                                     | `UKBB_450K_Autosomes_QCd.bim`                              |
+| inclusion_lists | Inclusion lists for selecting individuals during association testing. By default, generates two files, one for related samples and one for unrelated samples, for the three subpopulations (AFR, SAS, EUR) and ALL samples. | `INCLUDEFOR_{POP}_Related.txt`                             |
+| grm             | SAIGE-compatible GRM from [step4](#4-make-a-grm-compatible-with-saige) above                                                                                                                                                | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx`               |
+| grm_samp        | Associated .sample file                                                                                                                                                                                                     | `sparseGRM_450K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt` |
+| snp_list        | List of low MAC SNPs to exclude from BOLT from [step3](#3-perform-filtering) above                                                                                                                                          | `UKBB_450K_Autosomes_QCd.low_MAC.snplist`                  |
 
 ### Command line example
 
@@ -259,10 +303,12 @@ organisational documentation on how to download and build this app on the DNANex
 
 https://github.com/mrcepid-rap
 
-Running this command is straightforward using the DNANexus SDK toolkit as no inputs have to be provided on the command line:
+Running this command is straightforward using the DNANexus SDK toolkit as no inputs have to be provided on the command
+line:
 
 ```commandline
-dx run mrcepid-buildgrms --priority low --destination project_resources/genetics/ -isample_ids_file=file-GFjJ0yjJ0zVb9BK82ZQFkx0y -iancestry_file=file-GFjX7y8J0zVgB7JbPq7K23qP
+dx run mrcepid-buildgrms --priority low --destination project_resources/genetics/ --genetic_data_file=file-abcde123435 --isample_ids_file=file-GFjJ0yjJ0zVb9BK82ZQFkx0y 
+--iancestry_file=file-GFjX7y8J0zVgB7JbPq7K23qP --ukb_snps_qc=file-abcde123456 --ukb_snp_qc_v2=file-abcde123457 --relatedness_file=file-abcde123458
 ```
 
 Brief I/O information can also be retrieved on the command line:
@@ -272,13 +318,16 @@ dx run mrcepid-buildgrms --help
 ```
 
 Some notes here regarding execution:
-1. Outputs are deposited into the folder named by `destination`. If this is left off of the command line, the tool will 
+
+1. Outputs are deposited into the folder named by `destination`. If this is left off of the command line, the tool will
    deposit the resulting data into the top level directory of your project
 
-2. I have set a sensible (and tested) default for compute resources on DNANexus that is baked into the json used for building the app (at `dxapp.json`)
-   so setting an instance type is unnecessary. This current default is for a mem2_ssd1_v2_x16 instance (16 CPUs, 32 Gb RAM, 400Gb storage).
+2. I have set a sensible (and tested) default for compute resources on DNANexus that is baked into the json used for
+   building the app (at `dxapp.json`)
+   so setting an instance type is unnecessary. This current default is for a mem2_ssd1_v2_x16 instance (16 CPUs, 32 Gb
+   RAM, 400Gb storage).
    If necessary to adjust compute resources, one can provide a flag like `--instance-type mem1_ssd1_v2_x36`.
-   
+
 #### Batch Running
 
 This applet is not compatible with batch running.
