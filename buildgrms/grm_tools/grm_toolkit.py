@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List, Dict, Set, Tuple
 
 import dxpy
-import numpy as np
 import pandas as pd
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
 from general_utilities.job_management.command_executor import build_default_command_executor

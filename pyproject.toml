@@ -11,7 +11,7 @@ dependencies = [
     "dxpy==0.346.0",
     "pandas==1.5.2",
     "numpy==1.23.2",
-    "general-utilities @ git+https://github.com/mrcepid-rap/general_utilities.git@main"
+    "general-utilities @ git+https://github.com/mrcepid-rap/general_utilities.git@combined-dev"
 ]
 
 [build-system]

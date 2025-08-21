@@ -11,6 +11,7 @@
 # DNAnexus Python Bindings (dxpy) documentation:
 #   http://autodoc.dnanexus.com/bindings/python/current/
 import dxpy
+from general_utilities.import_utils.file_handlers.export_file_handler import ExportFileHandler
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler, FileType
 from general_utilities.mrc_logger import MRCLogger
 
@@ -21,12 +22,13 @@ LOGGER = MRCLogger().get_logger()
 
 
 @dxpy.entry_point('main')
-def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, snp_qc: dict, sample_qc: dict, ukb_snp_qc: dict, ukb_snps_qc_v2: dict, relatedness_file: dict):
+def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, snp_qc: dict, sample_qc: dict,
+         ukb_snp_qc: dict, ukb_snps_qc_v2: dict, relatedness_file: dict):
     # Grab plink files and sample exclusion lists
     genetic_files, sample_ids_file, ancestry_file, relatedness = ingest_resources(genetic_data_file,
-                                                                     sample_ids_file,
-                                                                     ancestry_file,
-                                                                     relatedness_file)
+                                                                                  sample_ids_file,
+                                                                                  ancestry_file,
+                                                                                  relatedness_file)
 
     if (snp_qc and sample_qc) is None and (ukb_snp_qc and ukb_snps_qc_v2) is None:
         raise ValueError(
@@ -60,21 +62,24 @@ def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, sn
 
     # Filter plink files to something we can use for BOLT and making GRMs
     # do not filter for WBA/Relateds, only for QC fail samples and SNPs
-    final_genetic_file, snplist = filter_plink(merged_filename=merged_filename, pass_snps=pass_snps, pass_samples=pass_samples)
+    final_genetic_file, snplist = filter_plink(merged_filename=merged_filename, pass_snps=pass_snps,
+                                               pass_samples=pass_samples)
 
     # Now here we generate GRMs for tools that require it (SAIGE & STAAR):
     # BOLT and REGENIE use raw PLINK files, so do not need it here:
     grm, grm_sample = make_grm(samples, relatedness)
 
+    exporter = ExportFileHandler()
     # Have to do 'upload_local_file' to make sure the new file is registered with dna nexus
-    output = {'output_pgen': dxpy.dxlink(dxpy.upload_local_file(f'{final_genetic_file.name}.bed')),
-              'output_psam': dxpy.dxlink(dxpy.upload_local_file(f'{final_genetic_file.name}.fam')),
-              'output_pvar': dxpy.dxlink(dxpy.upload_local_file(f'{final_genetic_file.name}.bim')),
-              'inclusion_lists': [dxpy.dxlink(item) for item in include_files],
-              'grm': dxpy.dxlink(dxpy.upload_local_file(grm.name)),
-              'grm_samp': dxpy.dxlink(
-                  dxpy.upload_local_file(grm_sample.name)),
-              'snp_list': dxpy.dxlink(dxpy.upload_local_file(snplist.name))}
+    output = {
+        'output_pgen': exporter.export_files(f'{final_genetic_file.name}.bed'),
+        'output_psam': exporter.export_files(f'{final_genetic_file.name}.fam'),
+        'output_pvar': exporter.export_files(f'{final_genetic_file.name}.bim'),
+        'inclusion_lists': exporter.export_files(include_files),
+        'grm': exporter.export_files(grm.name),
+        'grm_samp': exporter.export_files(grm_sample.name),
+        'snp_list': exporter.export_files(snplist.name)
+    }
 
     return output
 
