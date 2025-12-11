@@ -148,11 +148,15 @@
     "version": "0",
     "execDepends": [
       {
+        "name": "uv",
+        "package_manager": "pip"
+      },
+      {
         "name": "mrcepid-buildgrms",
         "package_manager": "git",
         "url": "https://github.com/mrcepid-rap/mrcepid-buildgrms.git",
         "tag": "feature/implement-exporter",
-        "build_commands": "pip install ."
+        "build_commands": "uv pip install --system ."
       }
     ]
   },
