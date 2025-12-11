@@ -6,8 +6,8 @@ name = "buildgrms"
 version = "0.1.0"
 description = ""
 authors = [
-  { name = "Alish Palmos", email = "alish.palmos@insmed.com" }
-    ]
+    { name = "Alish Palmos", email = "alish.palmos@insmed.com" }
+]
 readme = "README.md"
 requires-python = ">=3.8,<3.9"
 dependencies = [

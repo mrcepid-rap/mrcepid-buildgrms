@@ -142,7 +142,7 @@
       }
     },
     "interpreter": "python3",
-    "file": "src/build_grms.py",
+    "file": "buildgrms/build_grms.py",
     "distribution": "Ubuntu",
     "release": "20.04",
     "version": "0",
