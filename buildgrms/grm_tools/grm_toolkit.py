@@ -2,7 +2,7 @@ import csv
 import os
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 
 import dxpy
 import pandas as pd
@@ -13,7 +13,7 @@ CMD_EXECUTOR = build_default_command_executor()
 
 
 def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, relatedness_file: dict) -> \
-        Tuple[str, Path, Path, Path]:
+        Tuple[set, Path, Path, Optional[Path]]:
     """
     This function downloads the data we will need to run this module
 
@@ -40,40 +40,29 @@ def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_fi
     return genetic_files, sample_ids_file, ancestry_file, relatedness_file
 
 
-def download_genetic_data(input_file_list: Path) -> str:
+def download_genetic_data(input_file_list: Path) -> set:
     """
-    This function downloads the genetic data files using input coordinates
+    Downloads genetic data files using input coordinates.
 
     :param input_file_list: a file containing the genetic data file names and IDs
-    :return: stem of one of the files for downstream use
+    :return: a set of unique stems (prefixes) of the files for downstream use
     """
-    # we should have two columns in the genetic input file
-    # the first column should be the filename
-    # the second column should be the file ID
-    # in total there should be 22 sets of .bed .bim .fam files
+    valid_extensions = {'.bed', '.bim', '.fam'}
+    stems = set()
     with open(input_file_list, 'r') as file:
-        lines = file.readlines()
-        # check we have 22 chromosomes in sets of 3
-        if len(lines) != 66:
-            raise ValueError("The file must contain exactly 66 lines, 3 for each chromosome.")
-
-        for line in lines:
+        for line in file:
             columns = line.strip().split()
-            # check we have two columns, one being the filename and one being the file ID
             if len(columns) != 2:
                 raise ValueError(f"Each line must have exactly two columns. Invalid line: {line.strip()}")
+            filename, file_id = columns
+            if not any(filename.endswith(ext) for ext in valid_extensions):
+                raise ValueError(f"Invalid file extension in filename: {filename}")
+            # Download the file
+            InputFileHandler(file_id, download_now=True).get_file_handle()
+            # Add stem for downstream use
+            stems.add(Path(filename).stem)
+    return stems
 
-            # Check that the second column contains valid file extensions
-            valid_extensions = {'.bed', '.bim', '.fam'}
-            if not any(columns[0].endswith(ext) for ext in valid_extensions):
-                raise ValueError(f"Invalid file format in second column: {columns[0]}")
-
-            # download the files
-            file = line.strip().split()[1]
-            output = InputFileHandler(file, download_now=True).get_file_handle()
-
-    # return the stem of one of the files so we can use it downstream
-    return output.stem
 
 
 def merge_plink_files(genetic_files: str, cmd_executor=CMD_EXECUTOR) -> str:
