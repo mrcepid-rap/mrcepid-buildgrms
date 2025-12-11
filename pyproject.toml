@@ -1,3 +1,6 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
 [project]
 name = "buildgrms"
 version = "0.1.0"
@@ -14,9 +17,5 @@ dependencies = [
     "general-utilities @ git+https://github.com/mrcepid-rap/general_utilities.git@feature/sync-extract-with-genutils",
 ]
 
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-packages = ["buildgrms"]
+[project.urls]
+Repository = "https://https://github.com/mrcepid-rap/mrcepid-buildgrms"
