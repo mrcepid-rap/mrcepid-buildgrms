@@ -155,7 +155,7 @@
         "name": "mrcepid-buildgrms",
         "package_manager": "git",
         "url": "https://github.com/mrcepid-rap/mrcepid-buildgrms.git",
-        "tag": "v1.0.1",
+        "tag": "feature/implement-exporter",
         "build_commands": "uv pip install --system ."
       }
     ]
