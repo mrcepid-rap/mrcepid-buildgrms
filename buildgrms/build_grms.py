@@ -22,8 +22,8 @@ LOGGER = MRCLogger().get_logger()
 
 
 @dxpy.entry_point('main')
-def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, snp_qc: None, sample_qc: None,
-         ukb_snp_qc: None, ukb_snps_qc_v2: None, relatedness_file: None):
+def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict,
+         snp_qc=None, sample_qc=None, ukb_snp_qc=None, ukb_snps_qc_v2=None, relatedness_file=None):
     # Grab plink files and sample exclusion lists
     genetic_files, sample_ids_file, ancestry_file, relatedness = ingest_resources(genetic_data_file,
                                                                                   sample_ids_file,
