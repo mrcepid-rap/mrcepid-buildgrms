@@ -56,12 +56,12 @@
       "help": "This is an additional UK Biobank specific snp QC file. It's only required when using the UK Biobank data."
     },
     {
-        "name": "relatedness_file",
-        "label": "This is a UK Biobank specific relatedness file.",
-        "class": "file",
-        "optional": true,
-        "help": "This file contains information about relatedness between individuals in the UK Biobank dataset. If it's not provided, the app will generate a relatedness matrix based on the genetic data file."
-        }
+      "name": "relatedness_file",
+      "label": "This is a UK Biobank specific relatedness file.",
+      "class": "file",
+      "optional": true,
+      "help": "This file contains information about relatedness between individuals in the UK Biobank dataset. If it's not provided, the app will generate a relatedness matrix based on the genetic data file."
+    }
   ],
   "outputSpec": [
     {
@@ -142,7 +142,7 @@
       }
     },
     "interpreter": "python3",
-    "file": "buildgrms/build_grms.py",
+    "file": "build_grms.py",
     "distribution": "Ubuntu",
     "release": "20.04",
     "version": "0",
