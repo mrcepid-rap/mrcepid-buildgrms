@@ -52,7 +52,7 @@ def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict,
         ukb_snp_qc = InputFileHandler(ukb_snp_qc, download_now=True).get_file_handle()
         ukb_snps_qc_v2 = InputFileHandler(ukb_snps_qc_v2, download_now=True).get_file_handle()
         pass_snps, pass_samples = check_qc_ukb(samples, missingness, ukb_snp_qc, ukb_snps_qc_v2)
-    elif InputFileHandler(genetic_data_file).get_file_type() == FileType.LOCAL_PATH:
+    elif InputFileHandler(genetic_data_file).get_file_type() == FileType.LOCAL_PATH or InputFileHandler(genetic_data_file).get_file_type() == FileType.GCLOUD_FILE:
         # Check SNP and Sample QC for other datasets:
         snp_qc = InputFileHandler(snp_qc, download_now=True).get_file_handle()
         sample_qc = InputFileHandler(sample_qc, download_now=True).get_file_handle()

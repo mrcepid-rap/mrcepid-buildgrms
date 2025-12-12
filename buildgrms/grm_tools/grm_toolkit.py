@@ -456,11 +456,7 @@ def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) ->
     output_samples = Path("pass_samples.txt")
 
     # 1. Handle SNP QC (Whitelist approach)
-    # If the file is just a list of IDs, we read it directly.
-    # If it has headers/columns, we might need to adjust, but assuming list for now based on previous code.
     with open(snp_qc_file, 'r') as f_in, output_snps.open('w') as f_out:
-        # Assuming simple list of variant IDs for now.
-        # If your SNP QC file is also a TSV with headers, let me know!
         for line in f_in:
             if line.strip():
                 # Take first column if multiple exist
@@ -477,11 +473,9 @@ def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) ->
                 if 's' in row:
                     flagged_samples.add(row['s'])
                 else:
-                    # Fallback if header is missing/different: assume first column
                     flagged_samples.add(list(row.values())[0])
     except Exception as e:
         LOGGER.warning(f"Could not parse flagged samples file as TSV: {e}. Trying simple list.")
-        # Fallback for simple text file
         with open(sample_qc_file, 'r') as f:
             for line in f:
                 flagged_samples.add(line.strip().split()[0])
