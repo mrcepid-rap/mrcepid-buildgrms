@@ -56,7 +56,7 @@ def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict,
         # Check SNP and Sample QC for other datasets:
         snp_qc = InputFileHandler(snp_qc, download_now=True).get_file_handle()
         sample_qc = InputFileHandler(sample_qc, download_now=True).get_file_handle()
-        pass_snps, pass_samples = check_qc_other(snp_qc_file=snp_qc, sample_qc_file=sample_qc)
+        pass_snps, pass_samples = check_qc_other(wes_samples=samples, snp_qc_file=snp_qc, sample_qc_file=sample_qc)
     else:
         raise ValueError("Could not perform variant and/or sample QC on the input data. Check your input files.")
 

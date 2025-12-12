@@ -8,8 +8,11 @@ import dxpy
 import pandas as pd
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
 from general_utilities.job_management.command_executor import build_default_command_executor
+from general_utilities.mrc_logger import MRCLogger
 
 CMD_EXECUTOR = build_default_command_executor()
+
+LOGGER = MRCLogger().get_logger()
 
 
 def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, relatedness_file: dict) -> \
@@ -51,14 +54,21 @@ def download_genetic_data(input_file_list: Path) -> set:
     stems = set()
     with open(input_file_list, 'r') as file:
         for line in file:
+            # Skip empty lines if any
+            if not line.strip():
+                continue
+
             columns = line.strip().split()
             if len(columns) != 2:
                 raise ValueError(f"Each line must have exactly two columns. Invalid line: {line.strip()}")
             filename, file_id = columns
             if not any(filename.endswith(ext) for ext in valid_extensions):
                 raise ValueError(f"Invalid file extension in filename: {filename}")
+
             # Download the file
+            # InputFileHandler now automatically detects 'gs://' and handles it
             InputFileHandler(file_id, download_now=True).get_file_handle()
+
             # Add stem for downstream use
             stems.add(Path(filename).stem)
     return stems
@@ -66,13 +76,21 @@ def download_genetic_data(input_file_list: Path) -> set:
 
 def merge_plink_files(genetic_files: Set[str], cmd_executor=CMD_EXECUTOR) -> str:
     """
-    This function merges all autosomal files together. 
+    This function merges all autosomal files together.
     It uses the set of file stems provided by download_genetic_data.
+
+    If only one file is present (e.g. All of Us Array data), it skips the merge step.
 
     :param genetic_files: a set of file stems (prefixes) to be merged
     :param cmd_executor: a command executor object to run commands on the docker instance
     :return: the name of the merged file
     """
+
+    # If we only have one file, we don't need to merge anything.
+    if len(genetic_files) == 1:
+        single_file = list(genetic_files)[0]
+        LOGGER.info(f"Only one genetic file detected ({single_file}). Skipping merge step.")
+        return single_file
 
     # OUTPUT STUB
     output_stub = "Autosomes"
@@ -82,7 +100,7 @@ def merge_plink_files(genetic_files: Set[str], cmd_executor=CMD_EXECUTOR) -> str
     # We sort them to ensure the order is deterministic.
     with open('merge_list.txt', 'w') as merge_list:
         for base_name in sorted(genetic_files):
-            # We assume the docker container maps the current directory to 
+            # We assume the docker container maps the current directory to
             # and that PLINK expects the prefix without extension
             merge_list.write(f"{base_name}\n")
 
@@ -208,7 +226,9 @@ def load_samples(sample_ids_file: Path) -> Set[str]:
     """
     # Read overall list of individuals with data so we can subset the genetic data.
     with sample_ids_file.open('r') as wes_samp_file:
-        return {line.strip() for line in wes_samp_file if line.strip()}
+        # split() splits on any whitespace (tabs/spaces)
+        # [0] grabs the first column (the Sample ID)
+        return {line.strip().split()[0] for line in wes_samp_file if line.strip()}
 
 
 def load_relatedness(relatedness: Path, wes_samples: Set[str]) -> pd.DataFrame:
@@ -419,32 +439,63 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     return pass_snps_file, pass_samples
 
 
-def check_qc_other(snp_qc_file: Path, sample_qc_file: Path) -> Tuple[Path, Path]:
+def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) -> Tuple[Path, Path]:
     """
-    When working with non-DNA Nexus files, we may still have some QC files that we need to check. This is a
-    placeholder function to do that.
+    Filters samples and SNPs for non-DNAnexus datasets.
 
-    :param snp_qc_file: a file containing the SNP QC information
-    :param sample_qc_file: a file containing the sample QC information
+    For SAMPLES: treats 'sample_qc_file' as a BLACKLIST (samples to remove).
+    For SNPS: treats 'snp_qc_file' as a WHITELIST (variants to keep).
+
+    :param wes_samples: The set of all available samples (from sample_ids_file)
+    :param snp_qc_file: A file containing the SNP QC information (Whitelist)
+    :param sample_qc_file: A file containing the flagged samples (Blacklist)
     :return: a tuple of the pass SNPs file and the pass samples file
     """
 
     output_snps = Path("pass_snps.txt")
     output_samples = Path("pass_samples.txt")
 
-    # Read in the SNP QC file
-    snp_qc = csv.DictReader(open(snp_qc_file, 'r'), delimiter=" ")
-    # Create a simple list of SNPs that pass our QC
-    with output_snps.open('w') as snps_file:
-        for snp in snp_qc:
-            snps_file.write(snp['ID'] + "\n")  # Assuming 'ID' is the column name for SNP IDs
+    # 1. Handle SNP QC (Whitelist approach)
+    # If the file is just a list of IDs, we read it directly.
+    # If it has headers/columns, we might need to adjust, but assuming list for now based on previous code.
+    with open(snp_qc_file, 'r') as f_in, output_snps.open('w') as f_out:
+        # Assuming simple list of variant IDs for now.
+        # If your SNP QC file is also a TSV with headers, let me know!
+        for line in f_in:
+            if line.strip():
+                # Take first column if multiple exist
+                f_out.write(line.strip().split()[0] + "\n")
 
-    # Read in the sample QC file
-    sample_qc = csv.DictReader(open(sample_qc_file, 'r'), delimiter=" ")
-    # Create a simple list of samples that pass our QC
-    with output_samples.open('w') as samples_file:
-        for sample in sample_qc:
-            samples_file.write(sample['ID'] + "\n")  # Assuming 'ID' is the column name for sample IDs
+    # 2. Handle Sample QC (Blacklist approach)
+    # Read the flagged samples file (All of Us format: header with 's' column)
+    flagged_samples = set()
+    try:
+        with open(sample_qc_file, 'r') as f:
+            # Your file is TSV and has a header starting with 's'
+            reader = csv.DictReader(f, delimiter='\t')
+            for row in reader:
+                if 's' in row:
+                    flagged_samples.add(row['s'])
+                else:
+                    # Fallback if header is missing/different: assume first column
+                    flagged_samples.add(list(row.values())[0])
+    except Exception as e:
+        LOGGER.warning(f"Could not parse flagged samples file as TSV: {e}. Trying simple list.")
+        # Fallback for simple text file
+        with open(sample_qc_file, 'r') as f:
+            for line in f:
+                flagged_samples.add(line.strip().split()[0])
+
+    LOGGER.info(f"Identified {len(flagged_samples)} flagged samples to remove.")
+
+    # 3. Subtract Blacklist from Whitelist
+    final_samples = wes_samples - flagged_samples
+    LOGGER.info(f"Retaining {len(final_samples)} samples after QC filtering.")
+
+    # 4. Write the final pass_samples.txt
+    with output_samples.open('w') as f_out:
+        for sample in final_samples:
+            f_out.write(f"{sample}\n")
 
     return output_snps, output_samples
 
