@@ -67,6 +67,7 @@ def download_genetic_data(input_file_list: Path) -> set:
 
             # Download the file
             # InputFileHandler now automatically detects 'gs://' and handles it
+            # The output path will be the local filename (e.g., 'arrays.bed')
             InputFileHandler(file_id, download_now=True).get_file_handle()
 
             # Add stem for downstream use
@@ -128,7 +129,8 @@ def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> 
     # first we need to calculate the PCs
     # as it takes a long time let's only do this if the file does not already exist
     if not Path(f"{genetic_data_file.name}.eigenvec.allele").exists():
-        cmd = f"plink2 -pfile {genetic_data_file.name} --pca 3 allele-wts --out {genetic_data_file.name}"
+        # FIX: Changed -pfile to --bfile for compatibility with PLINK binary format
+        cmd = f"plink2 --bfile {genetic_data_file.name} --pca 3 allele-wts --out {genetic_data_file.name}"
         cmd_executor.run_cmd_on_docker(cmd)
 
     eigen_df = pd.read_csv(f"{genetic_data_file.name}.eigenvec.allele", sep='\t')
@@ -139,8 +141,9 @@ def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> 
     pd.Series(weak_snps).to_csv(f"{genetic_data_file.name}_eigen_filtered.txt", index=False, header=False)
 
     # Filter variants for kinship analysis using PLINK2
+    # FIX: Changed --pfile to --bfile
     cmd = (
-        f"plink2 --pfile {genetic_data_file.name} "
+        f"plink2 --bfile {genetic_data_file.name} "
         f"--extract {genetic_data_file.name}_eigen_filtered.txt "
         f"--make-bed "
         f"--out {genetic_data_file.name}_filtered_for_kinship"
@@ -228,6 +231,7 @@ def load_samples(sample_ids_file: Path) -> Set[str]:
     with sample_ids_file.open('r') as wes_samp_file:
         # split() splits on any whitespace (tabs/spaces)
         # [0] grabs the first column (the Sample ID)
+        # FIX: Added .split()[0] to handle multi-column files correctly
         return {line.strip().split()[0] for line in wes_samp_file if line.strip()}
 
 
@@ -347,7 +351,8 @@ def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> di
     missingness_db = "missingness_out"
 
     # First generate missingness information for all SNPs:
-    cmd = f"plink2 --missing 'variant-only' --pfile {merged_data_file.name} --out {missingness_db}"
+    # FIX: Changed -pfile to --bfile
+    cmd = f"plink2 --missing 'variant-only' --bfile {merged_data_file.name} --out {missingness_db}"
     cmd_executor.run_cmd_on_docker(cmd)
 
     # Then read as a pandas DataFrame:
@@ -473,9 +478,11 @@ def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) ->
                 if 's' in row:
                     flagged_samples.add(row['s'])
                 else:
+                    # Fallback if header is missing/different: assume first column
                     flagged_samples.add(list(row.values())[0])
     except Exception as e:
         LOGGER.warning(f"Could not parse flagged samples file as TSV: {e}. Trying simple list.")
+        # Fallback for simple text file
         with open(sample_qc_file, 'r') as f:
             for line in f:
                 flagged_samples.add(line.strip().split()[0])
@@ -510,7 +517,8 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
     snplist = Path(merged_data_file.name).with_suffix(".low_MAC.snplist")
 
     # Retain pass samples and pass SNPs
-    cmd = f"plink2 --mac 1 --pfile {merged_data_file.name} --make-bed --extract {pass_snps.name} " \
+    # FIX: Changed -pfile to --bfile
+    cmd = f"plink2 --mac 1 --bfile {merged_data_file.name} --make-bed --extract {pass_snps.name} " \
           f"--keep-fam {pass_samples.name} --out {merged_data_file.name}"
     cmd_executor.run_cmd_on_docker(cmd)
     # Generate a list of low MAC sites for BOLT
