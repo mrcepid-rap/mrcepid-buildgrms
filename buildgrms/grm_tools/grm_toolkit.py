@@ -67,7 +67,6 @@ def download_genetic_data(input_file_list: Path) -> set:
 
             # Download the file
             # InputFileHandler now automatically detects 'gs://' and handles it
-            # The output path will be the local filename (e.g., 'arrays.bed')
             InputFileHandler(file_id, download_now=True).get_file_handle()
 
             # Add stem for downstream use
@@ -154,21 +153,11 @@ def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> 
     cmd = f"plink2 --bfile {genetic_data_file.name}_filtered_for_kinship --make-king-table --out {relatedness_db}"
     cmd_executor.run_cmd_on_docker(cmd)
 
-    with open(f"{relatedness_db}.kin0", 'r') as kin0_file:
-        kin0_data = pd.read_csv(kin0_file, delim_whitespace=True)
-        # Keep and rename specific columns
-        kin0_data = kin0_data[['IID1', 'IID2', 'HETHET', 'IBS0', 'KINSHIP']].rename(
-            columns={'IID1': 'ID1',
-                     'IID2': 'ID2',
-                     'HETHET': 'HetHet',
-                     'IBS0': 'IBS0',
-                     'KINSHIP': 'Kinship'}
-        )
-        # Write the processed DataFrame to a file
-        kin0_data.to_csv(f"{relatedness_db}_processed.kin0", sep='\t', index=False)
+    # Note: PLINK 2 king-table output headers are typically: #IID1 IID2 KINSHIP
+    # The file extension is .kin0
+    relatedness_output = f"{relatedness_db}.kin0"
 
-    relatedness_output = f"{relatedness_db}_processed.kin0"
-
+    # We return the raw output path. load_relatedness() handles standardization.
     return Path(relatedness_output)
 
 
@@ -231,32 +220,58 @@ def load_samples(sample_ids_file: Path) -> Set[str]:
     with sample_ids_file.open('r') as wes_samp_file:
         # split() splits on any whitespace (tabs/spaces)
         # [0] grabs the first column (the Sample ID)
-        # FIX: Added .split()[0] to handle multi-column files correctly
         return {line.strip().split()[0] for line in wes_samp_file if line.strip()}
 
 
 def load_relatedness(relatedness: Path, wes_samples: Set[str]) -> pd.DataFrame:
     """
-    This function loads the relatedness file and returns a DataFrame containing only the related individuals
+    This function loads the relatedness file and returns a DataFrame containing only the related individuals.
+    It normalizes the columns to 'ID1', 'ID2', 'Kinship' regardless of input format.
+
     :param relatedness:  a file containing the relatedness matrix table
     :param wes_samples: a set of individual IDs that are WES samples
-    :return: a DataFrame containing only the related individuals
+    :return: a DataFrame containing only the related individuals with standardized columns
     """
-    # Calculate relateds:
-    # Read the relatedness file in as a pandas DataFrame
-    # dtype sets eids as characters
-    # ID1 and ID2 are two spearate individuals that are related according to some kinship value
-    # Check if the file is empty
+
     if relatedness.stat().st_size == 0:
         return pd.DataFrame(columns=["ID1", "ID2", "Kinship"]).astype({"Kinship": "float64"})
 
-    # Read the file and filter based on WES samples
-    rel = pd.read_csv(
-        relatedness,
-        delim_whitespace=True,
-        names=["ID1", "ID2", "Kinship"],
-        skiprows=1
-    )
+    # Read the file
+    # We use delim_whitespace to handle both tabs and spaces
+    rel = pd.read_csv(relatedness, delim_whitespace=True)
+
+    # Standardize Column Names
+    # 1. Check for All of Us format (i.s, j.s, kin)
+    if 'i.s' in rel.columns and 'j.s' in rel.columns and 'kin' in rel.columns:
+        rel = rel.rename(columns={'i.s': 'ID1', 'j.s': 'ID2', 'kin': 'Kinship'})
+
+    # 2. Check for Standard KING/PLINK format (IID1, IID2, KINSHIP) or (ID1, ID2, Kinship)
+    # Note: PLINK output often has #IID1
+    rel.columns = rel.columns.str.replace('^#', '', regex=True)  # Remove leading # if present
+    rel = rel.rename(columns={
+        'IID1': 'ID1',
+        'IID2': 'ID2',
+        'KINSHIP': 'Kinship'
+    })
+
+    # Ensure IDs are strings to match wes_samples
+    rel['ID1'] = rel['ID1'].astype(str)
+    rel['ID2'] = rel['ID2'].astype(str)
+
+    # Filter to only keep required columns
+    if not {'ID1', 'ID2', 'Kinship'}.issubset(rel.columns):
+        # Fallback: Assume the file is headerless and columns 0, 1, and the last column are what we want
+        # This handles cases where headers are completely missing
+        LOGGER.warning(f"Could not detect standard headers in relatedness file. Assuming columns 0, 1, and last.")
+        rel = pd.read_csv(relatedness, delim_whitespace=True, header=None, skiprows=1)
+        rel = rel.rename(columns={0: 'ID1', 1: 'ID2', rel.columns[-1]: 'Kinship'})
+        rel['ID1'] = rel['ID1'].astype(str)
+        rel['ID2'] = rel['ID2'].astype(str)
+
+    # Keep only the standardized columns
+    rel = rel[['ID1', 'ID2', 'Kinship']]
+
+    # Filter based on WES samples
     return rel[(rel["ID1"].isin(wes_samples)) & (rel["ID2"].isin(wes_samples))]
 
 
@@ -482,7 +497,6 @@ def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) ->
                     flagged_samples.add(list(row.values())[0])
     except Exception as e:
         LOGGER.warning(f"Could not parse flagged samples file as TSV: {e}. Trying simple list.")
-        # Fallback for simple text file
         with open(sample_qc_file, 'r') as f:
             for line in f:
                 flagged_samples.add(line.strip().split()[0])
@@ -565,9 +579,13 @@ def make_grm(wes_samples: set, rel_mtx: Path) -> Tuple[Path, Path]:
     wes_samples_sorted['column1'] = wes_samples_sorted.index + 1
     wes_samples_sorted['column2'] = wes_samples_sorted.index + 1
 
-    # import UKBB KING matrix
+    # import UKBB KING matrix (or AoU Normalized matrix)
+    # Note: load_relatedness has already normalized the columns to ID1, ID2, Kinship
     gt_matrix = pd.read_csv(rel_mtx, sep="\t", dtype={'ID1': str, 'ID2': str})
-    gt_matrix = gt_matrix.drop(columns=['HetHet', 'IBS0'])
+
+    # We no longer drop HetHet/IBS0 because they might not exist in AoU data.
+    # We select only the columns we need.
+    gt_matrix = gt_matrix[['ID1', 'ID2', 'Kinship']]
 
     # Filter to individuals that have WES data...
     gt_matrix = gt_matrix[gt_matrix['ID1'].isin(wes_samples)]
