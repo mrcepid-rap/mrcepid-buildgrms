@@ -1,10 +1,8 @@
 import csv
-import os
 import subprocess
 from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional
 
-import dxpy
 import pandas as pd
 from general_utilities.import_utils.file_handlers.export_file_handler import ExportFileHandler
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
@@ -118,7 +116,6 @@ def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> 
     This function calculates the relatedness of the samples in the genetic data file
 
     :param genetic_data_file: a path to the genetic data file
-    :param run_king: a boolean indicating whether to run KING for relatedness calculation
     :param cmd_executor: a command executor object to run commands on the docker instance
     :return: a path to the relatedness file matrix
     """
@@ -214,7 +211,7 @@ def load_ancestry_dict(ancestry_file: Path) -> Dict[str, Set[str]]:
 
         # 1. Detect ID Column
         id_col = None
-        possible_id_cols = ['research_id', 'n_eid', 'person_id', 'IID']
+        possible_id_cols = ['research_id', 'n_eid', 'person_id', 'IID', 'sample_id']
         for candidate in possible_id_cols:
             if candidate in header:
                 id_col = candidate
@@ -227,7 +224,7 @@ def load_ancestry_dict(ancestry_file: Path) -> Dict[str, Set[str]]:
 
         # 2. Detect Ancestry Column
         anc_col = None
-        possible_anc_cols = ['POP', 'ancestry_pred']
+        possible_anc_cols = ['POP', 'ancestry_pred', 'ancestry', 'predicted_ancestry']
         for candidate in possible_anc_cols:
             if candidate in header:
                 anc_col = candidate
@@ -359,11 +356,6 @@ def write_and_upload_ancestry_files(wes_samples: Set[str], ancestry_dict: Dict[s
     :return: a list of DXFile objects representing the uploaded inclusion files
     """
 
-    # Write ancestry-specific exclusion lists, relatedness, and combo of the two:
-    # 1. list of WES non-ancestry or related individuals
-    # 2. list of ancestry-specific individuals with WES
-    # 3. list of related individuals with WES
-
     # Get lists of samples to include specific to certain ancestries:
     include_files = []
 
@@ -384,10 +376,9 @@ def write_and_upload_ancestry_files(wes_samples: Set[str], ancestry_dict: Dict[s
 
         exporter = ExportFileHandler()
 
-        include_files.extend([
-            exporter.export_files(unrelated_path.name),
-            exporter.export_files(related_path.name)
-        ])
+        # Manually export files using the ExportFileHandler (supports GCP upload)
+        include_files.append(exporter.export_files(unrelated_path.name))
+        include_files.append(exporter.export_files(related_path.name))
 
     return include_files
 
