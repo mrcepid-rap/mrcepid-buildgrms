@@ -582,9 +582,10 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
           f"--keep-fam {pass_samples.name} --out {merged_data_file.name}"
     cmd_executor.run_cmd_on_docker(cmd)
     # Generate a list of low MAC sites for BOLT
+    # fail silently if no SNPs are found
     cmd = f"plink2 --bfile {merged_data_file.name} --max-mac 100 --write-snplist " \
           f"--out {merged_data_file.name}.low_MAC"
-    cmd_executor.run_cmd_on_docker(cmd)
+    cmd_executor.run_cmd_on_docker(cmd, ignore_error=True)
 
     return merged_data_file, snplist
 
