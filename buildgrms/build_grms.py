@@ -75,7 +75,7 @@ def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict,
         'output_pgen': exporter.export_files(f'{final_genetic_file.name}.bed'),
         'output_psam': exporter.export_files(f'{final_genetic_file.name}.fam'),
         'output_pvar': exporter.export_files(f'{final_genetic_file.name}.bim'),
-        'inclusion_lists': exporter.export_files(include_files),
+        'inclusion_lists': include_files,
         'grm': exporter.export_files(grm.name),
         'grm_samp': exporter.export_files(grm_sample.name),
         'snp_list': exporter.export_files(snplist.name)
