@@ -2,6 +2,8 @@ import csv
 import os
 import subprocess
 import gc
+import shutil  # Added for disk usage checks
+import sys
 from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional, Union
 
@@ -14,6 +16,15 @@ from general_utilities.mrc_logger import MRCLogger
 # Initialize shared utilities
 CMD_EXECUTOR = build_default_command_executor()
 LOGGER = MRCLogger().get_logger()
+
+
+def check_disk_usage(path: str = ".") -> None:
+    """Debug helper: Prints disk usage statistics for the current volume."""
+    total, used, free = shutil.disk_usage(path)
+    LOGGER.info(
+        f"DISK USAGE ({path}): Total: {total // (2 ** 30)}GB | Used: {used // (2 ** 30)}GB | Free: {free // (2 ** 30)}GB")
+    # Also run df -h for good measure to see all mounts
+    subprocess.run("df -h", shell=True)
 
 
 def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, relatedness_file: dict) -> \
@@ -33,6 +44,7 @@ def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_fi
     else:
         LOGGER.info("No relatedness file provided; will calculate from scratch.")
 
+    check_disk_usage()
     return genetic_files, sample_ids_handle, ancestry_handle, relatedness_handle
 
 
@@ -202,7 +214,7 @@ def get_individuals(sample_ids_file: Path, ancestry_file: Path, relatedness: Pat
     LOGGER.info(f"Identified {len(relateds_to_remove)} related individuals to exclude.")
     include_files = write_and_upload_ancestry_files(wes_samples, ancestry_dict, relateds_to_remove)
 
-    # CRITICAL FIX: Force garbage collection to free GBs of RAM before PLINK starts
+    # Force garbage collection to free GBs of RAM before PLINK starts
     LOGGER.info("Starting memory cleanup...")
     del rel
     del ancestry_dict
@@ -279,9 +291,14 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
     """Applies QC filters to PLINK files."""
     merged_data_file = Path.cwd() / merged_filename
     LOGGER.info(f"Filtering genotype data. Input: {merged_data_file.name}, Output Prefix: {output_prefix}")
+
+    # Pre-flight Check
+    check_disk_usage()
+    sys.stdout.flush()  # Ensure logs are written before any potential crash
+
     snplist = Path(f"{output_prefix}.low_MAC.snplist")
 
-    # CRITICAL FIX: Cap PLINK memory to 32GB to leave room for Python/OS
+    # Limit PLINK to 32GB approx
     cmd = (f"plink2 --mac 1 --bfile {merged_data_file.name} --make-bed "
            f"--extract {pass_snps.name} --keep-fam {pass_samples.name} --out {output_prefix} --memory 32000")
     cmd_executor.run_cmd_on_docker(cmd)
