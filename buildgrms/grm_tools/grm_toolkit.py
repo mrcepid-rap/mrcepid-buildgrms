@@ -316,14 +316,29 @@ def get_individuals(sample_ids_file: Path, ancestry_file: Path, relatedness: Pat
 def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> dict:
     """Calculates per-variant missingness statistics."""
     merged_data_file = Path.cwd() / merged_filename
+
+    # Validation Check
+    extensions = ['.bed', '.bim', '.fam']
+    missing_files = [ext for ext in extensions if not Path(f"{merged_data_file}{ext}").exists()]
+
+    if missing_files:
+        raise FileNotFoundError(
+            f"PLINK files missing for prefix '{merged_filename}': {missing_files}. "
+            f"Current directory content: {list(Path.cwd().glob('*'))}"
+        )
+
     missingness_db = "missingness_out"
 
-    LOGGER.info("Calculating variant missingness...")
-    cmd = f"plink2 --missing 'variant-only' --bfile {merged_data_file.name} --out {missingness_db}"
+    LOGGER.info(f"Calculating variant missingness for {merged_filename}...")
+    cmd = f"plink2 --missing 'variant-only' --bfile {merged_filename} --out {missingness_db}"
     cmd_executor.run_cmd_on_docker(cmd)
 
     missingness = {}
-    with open(f"{missingness_db}.vmiss", 'r') as f:
+    vmiss_path = Path(f"{missingness_db}.vmiss")
+    if not vmiss_path.exists():
+        raise RuntimeError(f"PLINK failed to generate {vmiss_path}")
+
+    with open(vmiss_path, 'r') as f:
         reader = csv.DictReader(f, delimiter="\t")
         for snp in reader:
             missingness[snp['ID']] = float(snp['F_MISS'])
