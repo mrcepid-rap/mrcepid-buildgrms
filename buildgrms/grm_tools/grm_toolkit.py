@@ -99,21 +99,26 @@ def download_genetic_data(input_file_list: Path) -> Set[str]:
 def merge_plink_files(genetic_files: Set[str], cmd_executor=CMD_EXECUTOR) -> str:
     """
     Merges multiple PLINK binary files into a single dataset.
-    Skips merging if only one file set is present (common in Array data).
+    Ensures the output prefix is ALWAYS 'Autosomes' for downstream consistency.
     """
+    output_stub = "Autosomes"
+
     if len(genetic_files) == 1:
         single_file = list(genetic_files)[0]
-        LOGGER.info(f"Only one genetic file detected ({single_file}). Skipping merge step.")
-        return single_file
+        LOGGER.info(f"Only one genetic file detected ({single_file}). Standardizing to {output_stub}...")
+        # Use --make-bed to 'copy' the single file to the new name 'Autosomes'
+        cmd = f"plink2 --bfile {single_file} --make-bed --out {output_stub}"
+        cmd_executor.run_cmd_on_docker(cmd)
+        return output_stub
 
-    output_stub = "Autosomes"
     LOGGER.info(f"Merging {len(genetic_files)} PLINK files into '{output_stub}'...")
 
     with open('merge_list.txt', 'w') as merge_list:
         for base_name in sorted(genetic_files):
             merge_list.write(f"{base_name}\n")
 
-    cmd = f"plink2 --pmerge-list merge_list.txt bfile --out {output_stub}"
+    # The --make-bed flag here fixes the UKB PGEN issue you just had
+    cmd = f"plink2 --pmerge-list merge_list.txt bfile --make-bed --out {output_stub}"
     cmd_executor.run_cmd_on_docker(cmd)
 
     return output_stub
