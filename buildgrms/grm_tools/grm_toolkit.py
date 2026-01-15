@@ -98,26 +98,28 @@ def download_genetic_data(input_file_list: Path) -> Set[str]:
 
 def merge_plink_files(genetic_files: Set[str], cmd_executor=CMD_EXECUTOR) -> str:
     """
-    Merges multiple PLINK binary files into a single dataset.
-    Ensures the output prefix is ALWAYS 'Autosomes' for downstream consistency.
+    Merges PLINK files with validation checks.
     """
     output_stub = "Autosomes"
 
+    if not genetic_files:
+        raise ValueError("The set of genetic files is empty. Ingestion likely failed.")
+
     if len(genetic_files) == 1:
         single_file = list(genetic_files)[0]
-        LOGGER.info(f"Only one genetic file detected ({single_file}). Standardizing to {output_stub}...")
-        # Use --make-bed to 'copy' the single file to the new name 'Autosomes'
+        LOGGER.info(f"Standardizing {single_file} to {output_stub}...")
         cmd = f"plink2 --bfile {single_file} --make-bed --out {output_stub}"
         cmd_executor.run_cmd_on_docker(cmd)
         return output_stub
 
-    LOGGER.info(f"Merging {len(genetic_files)} PLINK files into '{output_stub}'...")
-
+    LOGGER.info(f"Preparing merge for {len(genetic_files)} files...")
     with open('merge_list.txt', 'w') as merge_list:
         for base_name in sorted(genetic_files):
+            # Check if each file actually exists before putting it in the list
+            if not Path(f"{base_name}.bed").exists():
+                LOGGER.error(f"Missing file: {base_name}.bed")
             merge_list.write(f"{base_name}\n")
 
-    # The --make-bed flag here fixes the UKB PGEN issue you just had
     cmd = f"plink2 --pmerge-list merge_list.txt bfile --make-bed --out {output_stub}"
     cmd_executor.run_cmd_on_docker(cmd)
 
@@ -214,30 +216,30 @@ def load_samples(sample_ids_file: Path) -> Set[str]:
 
 def _read_and_clean_relatedness(relatedness: Path) -> pd.DataFrame:
     """
-    Reads and standardizes relatedness matrix headers (AoU/UKB/PLINK formats).
-    Ensures output columns are always ['ID1', 'ID2', 'Kinship'].
+    Standardizes relatedness matrix with extra error handling.
     """
-    if relatedness.stat().st_size == 0:
-        return pd.DataFrame(columns=["ID1", "ID2", "Kinship"]).astype({"Kinship": "float64"})
+    if not relatedness.exists() or relatedness.stat().st_size == 0:
+        LOGGER.warning(f"Relatedness file {relatedness} is empty or missing.")
+        return pd.DataFrame(columns=["ID1", "ID2", "Kinship"])
 
-    rel = pd.read_csv(relatedness, delim_whitespace=True)
+    # Try reading with common delimiters (tab, space, etc.)
+    try:
+        rel = pd.read_csv(relatedness, sep=None, engine='python')
+    except Exception as e:
+        LOGGER.error(f"Pandas failed to parse relatedness: {e}")
+        return pd.DataFrame(columns=["ID1", "ID2", "Kinship"])
 
-    # Normalize All of Us headers
-    if 'i.s' in rel.columns and 'j.s' in rel.columns and 'kin' in rel.columns:
-        rel = rel.rename(columns={'i.s': 'ID1', 'j.s': 'ID2', 'kin': 'Kinship'})
+    # Normalize headers
+    cols = rel.columns.str.upper()
+    if 'IID1' in cols:
+        rel = rel.rename(columns={'IID1': 'ID1', 'IID2': 'ID2', 'KINSHIP': 'Kinship'})
+    elif 'I.S' in cols:
+        rel = rel.rename(columns={'I.S': 'ID1', 'J.S': 'ID2', 'KIN': 'Kinship'})
 
-    # Normalize standard PLINK headers
-    rel.columns = rel.columns.str.replace('^#', '', regex=True)
-    rel = rel.rename(columns={'IID1': 'ID1', 'IID2': 'ID2', 'KINSHIP': 'Kinship'})
-
-    # Fallback for headerless files
-    if not {'ID1', 'ID2', 'Kinship'}.issubset(rel.columns):
-        LOGGER.warning("Standard headers not found. Using index fallback.")
-        rel = pd.read_csv(relatedness, delim_whitespace=True, header=None, skiprows=1)
-        rel = rel.rename(columns={0: 'ID1', 1: 'ID2', rel.columns[-1]: 'Kinship'})
-
+    # Final Sanity Check: Ensure we have strings for IDs
     rel['ID1'] = rel['ID1'].astype(str)
     rel['ID2'] = rel['ID2'].astype(str)
+
     return rel[['ID1', 'ID2', 'Kinship']]
 
 
@@ -426,28 +428,30 @@ def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) ->
 def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = None,
                  output_prefix: str = "Filtered_Data", cmd_executor=CMD_EXECUTOR) -> Tuple[Path, Path]:
     """
-    Applies QC filters to PLINK files.
-    Includes Disk and Memory safeguards.
-
-    Args:
-        output_prefix: Filename prefix for output files to prevent overwriting inputs.
+    Applies QC filters with enhanced debugging to catch ID mismatches.
     """
     merged_data_file = Path.cwd() / merged_filename
-    LOGGER.info(f"Filtering genotype data. Input: {merged_data_file.name}, Output Prefix: {output_prefix}")
 
-    # Pre-flight Check: Ensure we have disk space before creating massive files
+    # DEBUG: Log the first 3 lines of input files to diagnose FID/IID mismatches
+    LOGGER.info("DEBUG: Checking ID formats for alignment...")
+    subprocess.run(f"head -n 3 {merged_data_file}.fam", shell=True)
+    subprocess.run(f"head -n 3 {pass_samples.name}", shell=True)
+
     check_disk_usage()
-    sys.stdout.flush()
 
-    snplist = Path(f"{output_prefix}.low_MAC.snplist")
-
-    # CRITICAL: Cap PLINK memory usage (~32GB) to leave room for Python/OS
-    cmd = (f"plink2 --mac 1 --bfile {merged_data_file.name} --make-bed "
-           f"--extract {pass_snps.name} --keep-fam {pass_samples.name} "
+    # Using --keep instead of --keep-fam is more robust across UKB and AoU
+    cmd = (f"plink2 --mac 1 --bfile {merged_filename} --make-bed "
+           f"--extract {pass_snps.name} --keep {pass_samples.name} "
            f"--out {output_prefix} --memory 32000")
+
     cmd_executor.run_cmd_on_docker(cmd)
 
+    # Post-check: Did we actually create the file?
+    if not Path(f"{output_prefix}.bed").exists():
+        raise RuntimeError(f"PLINK failed to create {output_prefix}.bed. Check the logs for filter exclusions.")
+
     # Generate Rare Variant list
+    snplist = Path(f"{output_prefix}.low_MAC.snplist")
     cmd = f"plink2 --bfile {output_prefix} --max-mac 100 --write-snplist --out {output_prefix}.low_MAC"
     cmd_executor.run_cmd_on_docker(cmd, ignore_error=True)
 
