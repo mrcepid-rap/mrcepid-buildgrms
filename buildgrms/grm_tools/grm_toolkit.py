@@ -353,7 +353,7 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     pass_snps_file = Path("pass_snps.txt")
     pass_samples = Path("pass_samples.txt")
 
-    # SNP QC
+    # SNP QC (Unchanged)
     with open(ukb_snp_qc, 'r') as f_in, pass_snps_file.open('w') as f_out:
         reader = csv.DictReader(f_in, delimiter=" ")
         arrs = [f"Batch_b{x:03d}_qc" for x in range(1, 96)] + [f"UKBiLEVEAX_b{x}_qc" for x in range(1, 12)]
@@ -364,8 +364,22 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
 
     # Sample QC
     ukb_sqc_v2_with_fam = Path("ukb_sqc_v2_with_fam.txt")
-    subprocess.run(f'paste -d " " {ukb_snps_qc_v2} > {ukb_sqc_v2_with_fam}', shell=True)
 
+    # 1. Find a .fam file to provide the IDs (Restoring OLD CODE logic)
+    # We look for any .fam file in the current directory
+    try:
+        fam_file = list(Path('.').glob('*.fam'))[0]
+    except IndexError:
+        raise FileNotFoundError("No .fam file found to align QC data! This is required for UKB.")
+
+    LOGGER.info(f"Aligning QC metadata using FAM file: {fam_file.name}")
+
+    # 2. Paste FAM + QC together.
+    # This aligns the Genotype IDs (Column 1 of FAM) with the QC Data.
+    subprocess.run(f'paste -d " " {fam_file.name} {ukb_snps_qc_v2} > {ukb_sqc_v2_with_fam}', shell=True)
+
+    # 3. Read the Aligned File
+    # The headers 'h' are designed for the pasted file (ID1/ID2 come from the FAM part)
     h = ['ID1', 'ID2', 'null1', 'null2', 'fam.gender', 'batch1', 'affyID1', 'affyID2', 'array', 'batch2', 'plate',
          'well', 'call.rate', 'dQC', 'dna.conc', 'sub.gender', 'inf.gender', 'x.int', 'y.int', 'plate.sub', 'well.sub',
          'missing.rate', 'het', 'het.pc.corr', 'het.missing.outliers', 'aneuploidy', 'in.kinship', 'excl.kinship',
@@ -374,10 +388,16 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     h.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
 
     with open(ukb_sqc_v2_with_fam, 'r') as f_in, pass_samples.open('w') as f_out:
+        # Use delimiter=" " as in old code
         reader = csv.DictReader(f_in, delimiter=" ", fieldnames=h)
         for s in reader:
-            if s['ID1'] in wes_samples and s['het.missing.outliers'] == "0" and s['in.phasing.auto'] == "1":
-                f_out.write(f"0 {s['ID1']}\n")  # FID 0
+            # Now s['ID1'] is actually the FID from the FAM file
+            if s['ID1'] in wes_samples:
+                # Check logic: het outlier must be 0, phasing must be 1
+                if s['het.missing.outliers'] == "0" and s['in.phasing.auto'] == "1":
+                    # FIX: Write 'FID IID' or just 'IID' depending on your FAM file.
+                    # Your Autosomes.fam has FID=IID, so writing the ID twice is safest.
+                    f_out.write(f"{s['ID1']} {s['ID1']}\n")
 
     return pass_snps_file, pass_samples
 
@@ -439,7 +459,7 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
 
     # CRITICAL: Cap PLINK memory usage (~32GB) to leave room for Python/OS
     cmd = (f"plink2 --mac 1 --bfile {merged_data_file.name} --make-bed "
-           f"--extract {pass_snps.name} --keep-fam {pass_samples.name} "
+           f"--extract {pass_snps.name} --keep {pass_samples.name} "
            f"--out {output_prefix} --memory 32000")
     cmd_executor.run_cmd_on_docker(cmd)
 
