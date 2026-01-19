@@ -10,7 +10,7 @@ import pandas as pd
 
 from general_utilities.import_utils.file_handlers.export_file_handler import ExportFileHandler
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
-from general_utilities.job_management.command_executor import build_default_command_executor
+from general_utilities.job_management.command_executor import build_default_command_executor, CommandExecutor
 from general_utilities.mrc_logger import MRCLogger
 
 # Initialize shared utilities
@@ -19,9 +19,12 @@ LOGGER = MRCLogger().get_logger()
 
 
 def check_disk_usage(path: str = ".") -> None:
-    """
-    Debug helper: Prints disk usage statistics for the current volume.
-    Useful for diagnosing "No space left on device" errors in large pipelines.
+    """Print disk usage statistics for the given path.
+
+    This is a debugging helper useful for diagnosing "No space left on device"
+    errors in large pipelines.
+
+    :param path: The path to check disk usage for. Defaults to current directory.
     """
     total, used, free = shutil.disk_usage(path)
     LOGGER.info(
@@ -35,16 +38,18 @@ def check_disk_usage(path: str = ".") -> None:
 
 
 def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, relatedness_file: dict) -> \
-        Tuple[set, Path, Path, Optional[Path]]:
-    """
-    Downloads and prepares all necessary genetic and metadata files for the pipeline.
+        Tuple[Set[str], Path, Path, Optional[Path]]:
+    """Download and prepare all necessary genetic and metadata files.
 
-    Returns:
-        Tuple containing:
-        - Set of genetic file stems (e.g., {'arrays', 'ukb_c1'}).
-        - Path to the sample IDs file.
-        - Path to the ancestry file.
-        - Path to the relatedness file (or None).
+    :param genetic_data_file: A DNAnexus file-like object (dict) for the genetic data coordinate list.
+    :param sample_ids_file: A DNAnexus file-like object (dict) for the sample IDs file.
+    :param ancestry_file: A DNAnexus file-like object (dict) for the ancestry file.
+    :param relatedness_file: A DNAnexus file-like object (dict) for the relatedness file, or None.
+    :return: A tuple containing:
+             - A set of genetic file stems (e.g., {'arrays', 'ukb_c1'}).
+             - Path to the sample IDs file.
+             - Path to the ancestry file.
+             - Path to the relatedness file (or None).
     """
     LOGGER.info("Starting resource ingestion...")
 
@@ -66,11 +71,10 @@ def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_fi
 
 
 def download_genetic_data(input_file_list: Path) -> Set[str]:
-    """
-    Parses a coordinate list file and downloads associated PLINK binaries.
+    """Parse a coordinate list file and download associated PLINK binaries.
 
-    Args:
-        input_file_list: Path to a text file containing [filename, path] columns.
+    :param input_file_list: Path to a text file containing [filename, path] columns.
+    :return: A set of unique genetic file stems that were downloaded.
     """
     valid_extensions = {'.bed', '.bim', '.fam'}
     stems = set()
@@ -96,10 +100,14 @@ def download_genetic_data(input_file_list: Path) -> Set[str]:
     return stems
 
 
-def merge_plink_files(genetic_files: Set[str], cmd_executor=CMD_EXECUTOR) -> str:
-    """
-    Merges multiple PLINK binary files into a single dataset.
-    Skips merging if only one file set is present.
+def merge_plink_files(genetic_files: Set[str], cmd_executor: CommandExecutor = CMD_EXECUTOR) -> str:
+    """Merge multiple PLINK binary files into a single dataset.
+
+    This method skips merging if only one file set is present.
+
+    :param genetic_files: A set of PLINK file stems to merge.
+    :param cmd_executor: An executor to run shell commands.
+    :return: The file stem of the merged PLINK dataset.
     """
     if len(genetic_files) == 1:
         single_file = list(genetic_files)[0]
@@ -120,9 +128,12 @@ def merge_plink_files(genetic_files: Set[str], cmd_executor=CMD_EXECUTOR) -> str
     return output_stub
 
 
-def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> Path:
-    """
-    Calculates the relatedness matrix using the KING-table algorithm via PLINK2.
+def calculate_relatedness(genetic_data_file: str, cmd_executor: CommandExecutor = CMD_EXECUTOR) -> Path:
+    """Calculate the relatedness matrix using the KING-table algorithm via PLINK2.
+
+    :param genetic_data_file: The file stem of the genetic data to process.
+    :param cmd_executor: An executor to run shell commands.
+    :return: Path to the generated KING-table kinship file.
     """
     genetic_data_path = Path.cwd() / genetic_data_file
     relatedness_db = "relatedness_table"
@@ -156,8 +167,14 @@ def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> 
     return Path(f"{relatedness_db}.kin0")
 
 
-def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> dict:
-    """Helper function to identify individuals causing the most relatedness connections."""
+def select_related_individual(rel: pd.DataFrame, samples_to_exclude: List[str]) -> Dict[str, pd.DataFrame]:
+    """Identify individuals causing the most relatedness connections.
+
+    :param rel: DataFrame with relatedness information.
+    :param samples_to_exclude: A list of sample IDs to exclude from consideration.
+    :return: A dictionary containing two DataFrames: 'rel' (filtered relatedness) and
+             'rel_totals' (counts of remaining related connections per individual).
+    """
     rel = rel[~rel['ID1'].isin(samples_to_exclude)]
     rel = rel[~rel['ID2'].isin(samples_to_exclude)]
 
@@ -169,9 +186,12 @@ def select_related_individual(rel: pd.DataFrame, samples_to_exclude: list) -> di
 
 
 def load_ancestry_dict(ancestry_file: Path) -> Dict[str, Set[str]]:
-    """
-    Loads ancestry information into a dictionary mapping Population -> Set of IDs.
-    Handles dynamic column detection for AoU vs. UKB formats.
+    """Load ancestry information into a dictionary mapping Population to a Set of IDs.
+
+    This method handles dynamic column detection for AoU vs. UKB formats.
+
+    :param ancestry_file: Path to the ancestry file.
+    :return: A dictionary mapping population strings to sets of sample IDs.
     """
     ancestry_dict = {'all': set()}
     ancestry_counts = {}
@@ -202,16 +222,24 @@ def load_ancestry_dict(ancestry_file: Path) -> Dict[str, Set[str]]:
 
 
 def load_samples(sample_ids_file: Path) -> Set[str]:
-    """Loads valid sample IDs into a set."""
+    """Load valid sample IDs into a set.
+
+    :param sample_ids_file: Path to the file containing sample IDs.
+    :return: A set of sample IDs.
+    """
     with sample_ids_file.open('r') as f:
         samps = {line.strip().split()[0] for line in f if line.strip()}
     return samps
 
 
 def _read_and_clean_relatedness(relatedness: Path) -> pd.DataFrame:
-    """
-    Reads and standardizes relatedness matrix headers (AoU/UKB/PLINK formats).
-    Ensures output columns are always ['ID1', 'ID2', 'Kinship'].
+    """Read and standardize a relatedness matrix from a file.
+
+    This function handles various header formats (AoU/UKB/PLINK) and ensures
+    the output DataFrame has columns ['ID1', 'ID2', 'Kinship'].
+
+    :param relatedness: Path to the relatedness file.
+    :return: A pandas DataFrame with standardized relatedness information.
     """
     if relatedness.stat().st_size == 0:
         return pd.DataFrame(columns=["ID1", "ID2", "Kinship"]).astype({"Kinship": "float64"})
@@ -238,12 +266,22 @@ def _read_and_clean_relatedness(relatedness: Path) -> pd.DataFrame:
 
 
 def load_relatedness(relatedness: Path, wes_samples: Set[str]) -> pd.DataFrame:
+    """Load and filter a relatedness matrix to include only specified samples.
+
+    :param relatedness: Path to the relatedness file.
+    :param wes_samples: A set of sample IDs to keep.
+    :return: A pandas DataFrame with relatedness information for the given samples.
+    """
     rel = _read_and_clean_relatedness(relatedness)
     return rel[(rel["ID1"].isin(wes_samples)) & (rel["ID2"].isin(wes_samples))]
 
 
 def get_relateds_to_remove(rel: pd.DataFrame) -> Set[str]:
-    """Iteratively removes individuals to break all related pairs."""
+    """Iteratively identify individuals to remove to break all related pairs.
+
+    :param rel: A DataFrame of related pairs.
+    :return: A set of sample IDs to remove.
+    """
     relateds_to_remove = set()
 
     returned = select_related_individual(rel, [])
@@ -253,17 +291,24 @@ def get_relateds_to_remove(rel: pd.DataFrame) -> Set[str]:
         samp_to_remove = rel_totals.iloc[-1].name
         relateds_to_remove.add(samp_to_remove)
 
-        returned = select_related_individual(rel, [samp_to_remove])
+        returned = select_related_individual(rel, list(relateds_to_remove))
         rel, rel_totals = returned['rel'], returned['rel_totals']
 
     return relateds_to_remove
 
 
 def write_and_upload_ancestry_files(wes_samples: Set[str], ancestry_dict: Dict[str, Set[str]],
-                                    relateds_to_remove: Set[str]) -> List:
-    """
-    Writes and uploads ancestry-specific sample inclusion lists.
-    Prepends '0' to sample IDs for PLINK compatibility with AoU Microarray data.
+                                    relateds_to_remove: Set[str]) -> List[dict]:
+    """Write and upload ancestry-specific sample inclusion lists.
+
+    This function generates files of samples for each ancestry group, both with
+    and without related individuals removed. It then uploads these files.
+    It also prepends '0' to sample IDs for PLINK compatibility.
+
+    :param wes_samples: Set of all samples.
+    :param ancestry_dict: Dictionary mapping ancestry to a set of sample IDs.
+    :param relateds_to_remove: Set of related sample IDs to exclude.
+    :return: A list of DNAnexus file-like objects (dicts) for the uploaded files.
     """
     include_files = []
     exporter = ExportFileHandler(delete_on_upload=False)
@@ -287,10 +332,19 @@ def write_and_upload_ancestry_files(wes_samples: Set[str], ancestry_dict: Dict[s
     return include_files
 
 
-def get_individuals(sample_ids_file: Path, ancestry_file: Path, relatedness: Path) -> Tuple[Set[str], List]:
-    """
-    Orchestrator for sample filtering and inclusion list generation.
-    Includes explicit memory management to prevent OOM errors.
+def get_individuals(sample_ids_file: Path, ancestry_file: Path, relatedness: Path) -> Tuple[Set[str], List[dict]]:
+    """Orchestrate sample filtering and inclusion list generation.
+
+    This function loads sample IDs, ancestry information, and relatedness data,
+    identifies related individuals to remove, and generates inclusion files for
+    each ancestry group. Includes explicit memory management.
+
+    :param sample_ids_file: Path to the sample IDs file.
+    :param ancestry_file: Path to the ancestry file.
+    :param relatedness: Path to the relatedness file.
+    :return: A tuple containing:
+             - A set of all WES sample IDs.
+             - A list of DNAnexus file-like objects for the uploaded inclusion files.
     """
     LOGGER.info("Processing ancestry and relatedness filtering...")
 
@@ -314,8 +368,13 @@ def get_individuals(sample_ids_file: Path, ancestry_file: Path, relatedness: Pat
     return wes_samples, include_files
 
 
-def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> dict:
-    """Calculates per-variant missingness statistics."""
+def calculate_missingness(merged_filename: str, cmd_executor: CommandExecutor = CMD_EXECUTOR) -> Dict[str, float]:
+    """Calculate per-variant missingness statistics using PLINK2.
+
+    :param merged_filename: The file stem of the merged PLINK dataset.
+    :param cmd_executor: An executor to run shell commands.
+    :return: A dictionary mapping variant ID to missingness fraction.
+    """
     merged_data_file = Path.cwd() / merged_filename
 
     # Validation Check
@@ -347,9 +406,16 @@ def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> di
     return missingness
 
 
-def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps_qc_v2: Path,
-                 cmd_executor=CMD_EXECUTOR) -> Tuple[Path, Path]:
-    """QC check logic specific to UK Biobank datasets on DNAnexus."""
+def check_qc_ukb(wes_samples: Set[str], missingness: Dict[str, float], ukb_snp_qc: Path, ukb_snps_qc_v2: Path) \
+        -> Tuple[Path, Path]:
+    """Perform QC checks specific to UK Biobank datasets.
+
+    :param wes_samples: A set of WES sample IDs.
+    :param missingness: A dictionary of variant missingness rates.
+    :param ukb_snp_qc: Path to the UKB SNP QC file.
+    :param ukb_snps_qc_v2: Path to the UKB sample QC file (version 2).
+    :return: A tuple containing paths to the passing SNPs file and passing samples file.
+    """
     pass_snps_file = Path("pass_snps.txt")
     pass_samples = Path("pass_samples.txt")
 
@@ -402,10 +468,15 @@ def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps
     return pass_snps_file, pass_samples
 
 
-def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) -> Tuple[Path, Path]:
-    """
-    QC check logic for non-UKB datasets (e.g., All of Us).
-    Implements SNP Whitelisting and Sample Blacklisting.
+def check_qc_other(wes_samples: Set[str], snp_qc_file: Path, sample_qc_file: Path) -> Tuple[Path, Path]:
+    """Perform QC checks for non-UKB datasets (e.g., All of Us).
+
+    This function implements SNP whitelisting and sample blacklisting.
+
+    :param wes_samples: A set of WES sample IDs.
+    :param snp_qc_file: Path to the SNP QC file (whitelist).
+    :param sample_qc_file: Path to the sample QC file (blacklist).
+    :return: A tuple containing paths to the passing SNPs file and passing samples file.
     """
     LOGGER.info("Starting QC Check for non-UKB (AoU) data...")
     output_snps = Path("pass_snps.txt")
@@ -440,13 +511,20 @@ def check_qc_other(wes_samples: set, snp_qc_file: Path, sample_qc_file: Path) ->
 
 
 def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = None,
-                 output_prefix: str = "Filtered_Data", cmd_executor=CMD_EXECUTOR) -> Tuple[Path, Path]:
-    """
-    Applies QC filters to PLINK files.
-    Includes Disk and Memory safeguards.
+                 output_prefix: str = "Filtered_Data", cmd_executor: CommandExecutor = CMD_EXECUTOR) -> Tuple[Path, Path]:
+    """Apply QC filters to PLINK files.
 
-    Args:
-        output_prefix: Filename prefix for output files to prevent overwriting inputs.
+    This function filters a PLINK dataset based on provided SNP and sample lists,
+    and also generates a list of rare variants. Includes disk and memory safeguards.
+
+    :param merged_filename: The file stem of the PLINK dataset to filter.
+    :param pass_snps: Path to a file of SNPs to keep.
+    :param pass_samples: Path to a file of samples to keep.
+    :param output_prefix: Filename prefix for output files.
+    :param cmd_executor: An executor to run shell commands.
+    :return: A tuple containing:
+             - Path object for the filtered PLINK data prefix.
+             - Path to the list of low minor allele count (MAC) variants.
     """
     merged_data_file = Path.cwd() / merged_filename
     LOGGER.info(f"Filtering genotype data. Input: {merged_data_file.name}, Output Prefix: {output_prefix}")
@@ -475,17 +553,27 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
 
 
 def column_swap(col1: str, col2: str) -> Tuple[str, str]:
-    """Ensures matrix coordinates are ordered for lower-left triangle storage."""
-    return (col2, col1) if col1 < col2 else (col1, col2)
+    """Ensure matrix coordinates are ordered for lower-left triangle storage.
+
+    :param col1: First coordinate.
+    :param col2: Second coordinate.
+    :return: A tuple of the coordinates, ordered.
+    """
+    return (col2, col1) if int(col1) < int(col2) else (col1, col2)
 
 
-def make_grm(wes_samples: set, rel_mtx: Path) -> Tuple[Path, Path]:
-    """Generates the sparse GRM in MatrixMarket format."""
+def make_grm(wes_samples: Set[str], rel_mtx: Path) -> Tuple[Path, Path]:
+    """Generate the sparse GRM in MatrixMarket format.
+
+    :param wes_samples: A set of sample IDs to include in the GRM.
+    :param rel_mtx: Path to the relatedness matrix file.
+    :return: A tuple containing paths to the GRM file and the sample ID file.
+    """
     LOGGER.info("Generating Sparse GRM matrix...")
     grm = Path('sparseGRM_470K_Autosomes_QCd.sparseGRM.mtx')
     grm_samples = Path('sparseGRM_470K_Autosomes_QCd.sparseGRM.mtx.sampleIDs.txt')
 
-    ws_sorted = sorted(wes_samples)
+    ws_sorted = sorted(list(wes_samples))
     ws_df = pd.DataFrame(data={'ID1': ws_sorted, 'ID2': ws_sorted, 'Kinship': 0.5})
     ws_df['column1'] = ws_df['column2'] = range(1, len(ws_sorted) + 1)
 
@@ -496,8 +584,11 @@ def make_grm(wes_samples: set, rel_mtx: Path) -> Tuple[Path, Path]:
     gt_matrix = pd.merge(gt_matrix, ws_df[['ID2', 'column2']], on='ID2', how="left")
 
     gt_matrix = pd.concat([gt_matrix, ws_df])[['column1', 'column2', 'Kinship']]
+    gt_matrix.dropna(inplace=True)
+    gt_matrix['column1'] = gt_matrix['column1'].astype(int)
+    gt_matrix['column2'] = gt_matrix['column2'].astype(int)
     gt_matrix[['column1', 'column2']] = gt_matrix.apply(
-        lambda row: column_swap(row['column1'], row['column2']), axis=1, result_type='expand'
+        lambda row: column_swap(str(row['column1']), str(row['column2'])), axis=1, result_type='expand'
     )
     gt_matrix = gt_matrix.sort_values(['column1', 'column2'])
 
