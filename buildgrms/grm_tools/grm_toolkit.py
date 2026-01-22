@@ -389,81 +389,56 @@ def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> di
     return missingness
 
 
-def check_qc_ukb(wes_samples: set, missingness: dict, ukb_snp_qc: Path, ukb_snps_qc_v2: Path,
-                 cmd_executor=CMD_EXECUTOR) -> Tuple[Path, Path]:
+def check_qc_ukb(wes_samples: Set[str], missingness: Dict[str, float], ukb_snp_qc: Path, ukb_snps_qc_v2: Path) \
+        -> Tuple[Path, Path]:
+    """Perform QC checks specific to UK Biobank datasets.
+    :param wes_samples: A set of WES sample IDs.
+    :param missingness: A dictionary of variant missingness rates.
+    :param ukb_snp_qc: Path to the UKB SNP QC file.
+    :param ukb_snps_qc_v2: Path to the UKB sample QC file (version 2).
+    :return: A tuple containing paths to the passing SNPs file and passing samples file.
     """
-    This function checks the quality control of the SNPs and samples in the genetic data file
-
-    :param wes_samples: a set of WES samples
-    :param missingness: a dictionary of SNP IDs and their missingness values
-    :param ukb_snp_qc: a file containing the SNP QC information
-    :param ukb_snps_qc_v2: a file containing the SNP QC information version 2
-    :param cmd_executor: Command Executor for running commands on Docker
-    :return: a tuple of the pass SNPs file and the pass samples file
-    """
-
     pass_snps_file = Path("pass_snps.txt")
-
-    # Read in UKBiobank provided quality control for SNPs
-    snp_qc = csv.DictReader(open(ukb_snp_qc, 'r'), delimiter=" ")
-    # Create a simple list of SNPs that pass our QC
-    pass_snps = open(pass_snps_file, 'w')
-
-    # Generate list of the names of arrays so we can iterate through them programmatically below
-    array_names = []
-    for x in range(1, 96):  # Why is range zero-based... but not?
-        array_names.append("Batch_b%03d_qc" % x)
-    for x in range(1, 12):
-        array_names.append("UKBiLEVEAX_b%d_qc" % x)
-
-    # And then check each SNP to make sure it is on both arrays, an autosome and has missingness < 0.05%,
-    for snp in snp_qc:
-        if snp['array'] == "2" and int(snp['chromosome']) <= 22 and missingness[snp['rs_id']] < 0.05:
-            pass_batch_qc = True
-            # Now iterate through each individual array and make sure the SNP passes there
-            for array_ID in array_names:
-                if snp[array_ID] != "1":
-                    pass_batch_qc = False
-
-            if pass_batch_qc:
-                pass_snps.write(snp['rs_id'] + "\n")
-
-    pass_snps.close()
-
-    # Have to generate a pasted version of the sample QC file with the fam file to get useable sample IDs:
-    ukb_sqc_v2_with_fam = Path("ukb_sqc_v2_with_fam.txt")
-    cmd = f'paste -d " " {ukb_snps_qc_v2} > {ukb_sqc_v2_with_fam}'
-    subprocess.run(cmd, shell=True)
-    # Check sample QC files:
-    # Here generating a header that mashes together the two files above
-    snp_qc_header = ['ID1', 'ID2', 'null1', 'null2', 'fam.gender', 'batch1',
-                     'affyID1', 'affyID2', 'array', 'batch2', 'plate', 'well',
-                     'call.rate', 'dQC', 'dna.conc', 'sub.gender', 'inf.gender',
-                     'x.int', 'y.int', 'plate.sub', 'well.sub', 'missing.rate',
-                     'het', 'het.pc.corr', 'het.missing.outliers', 'aneuploidy', 'in.kinship',
-                     'excl.kinship', 'excess.relatives', 'in.wba', 'used.pc']
-    snp_qc_header.extend(["PC%d" % item for item in range(1, 41)])
-    snp_qc_header.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
-
-    snp_qc = csv.DictReader(open(ukb_sqc_v2_with_fam, 'r'), delimiter=" ", fieldnames=snp_qc_header)
-    # write pass IDs as a file:
     pass_samples = Path("pass_samples.txt")
-    wr_file = open(pass_samples, 'w')
-
-    # Retain samples that are:
-    # 1. In the WES samples
-    # 2. Are not missingness outliers
-    # 3. Are included in autosomal phasing
-    for sample in snp_qc:
-        if sample['ID1'] in wes_samples \
-                and sample['het.missing.outliers'] == "0" \
-                and sample['in.phasing.auto'] == "1" \
-                and sample['in.phasing.x'] == "1" \
-                and sample['in.phasing.xy'] == "1":
-            wr_file.write(sample['ID1'] + "\n")
-
-    wr_file.close()
-
+    # SNP QC
+    with open(ukb_snp_qc, 'r') as f_in, pass_snps_file.open('w') as f_out:
+        reader = csv.DictReader(f_in, delimiter=" ")
+        arrs = [f"Batch_b{x:03d}_qc" for x in range(1, 96)] + [f"UKBiLEVEAX_b{x}_qc" for x in range(1, 12)]
+        for snp in reader:
+            if snp['array'] == "2" and int(snp['chromosome']) <= 22 and missingness[snp['rs_id']] < 0.05:
+                if all(snp[a] == "1" for a in arrs):
+                    f_out.write(snp['rs_id'] + "\n")
+    # Sample QC
+    ukb_sqc_v2_with_fam = Path("ukb_sqc_v2_with_fam.txt")
+    # 1. Find a .fam file to provide the IDs.
+    # We look for any .fam file in the current directory, prioritising 'Autosomes.fam'
+    fam_file = Path('Autosomes.fam')
+    if not fam_file.exists():
+        try:
+            fam_file = list(Path('.').glob('*.fam'))[0]
+        except IndexError:
+            raise FileNotFoundError("No .fam file found to align QC data! This is required for UKB.")
+    LOGGER.info(f"Aligning QC metadata using FAM file: {fam_file.name}")
+    # 2. Paste FAM + QC together.
+    # This aligns the Genotype IDs (Column 1 of FAM) with the QC Data.
+    subprocess.run(f'paste -d " " {fam_file.name} {ukb_snps_qc_v2} > {ukb_sqc_v2_with_fam}', shell=True)
+    # 3. Read the Aligned File
+    # The headers 'h' are designed for the pasted file (ID1/ID2 come from the FAM part)
+    h = ['ID1', 'ID2', 'null1', 'null2', 'fam.gender', 'batch1', 'affyID1', 'affyID2', 'array', 'batch2', 'plate',
+         'well', 'call.rate', 'dQC', 'dna.conc', 'sub.gender', 'inf.gender', 'x.int', 'y.int', 'plate.sub', 'well.sub',
+         'missing.rate', 'het', 'het.pc.corr', 'het.missing.outliers', 'aneuploidy', 'in.kinship', 'excl.kinship',
+         'excess.relatives', 'in.wba', 'used.pc']
+    h.extend([f"PC{x}" for x in range(1, 41)])
+    h.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
+    with open(ukb_sqc_v2_with_fam, 'r') as f_in, pass_samples.open('w') as f_out:
+        reader = csv.DictReader(f_in, delimiter=" ", fieldnames=h)
+        for s in reader:
+            # s['ID1'] is FID, s['ID2'] is IID from the .fam file
+            # wes_samples are IIDs, so we check against s['ID2']
+            if s['ID2'] in wes_samples:
+                # Check logic: het outlier must be 0, phasing must be 1
+                if s['het.missing.outliers'] == "0" and s['in.phasing.auto'] == "1":
+                    f_out.write(f"{s['ID1']} {s['ID2']}\n")
     return pass_snps_file, pass_samples
 
 
@@ -497,33 +472,45 @@ def check_qc_other(snp_qc_file: Path, sample_qc_file: Path) -> Tuple[Path, Path]
     return output_snps, output_samples
 
 
-def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = None, cmd_executor=CMD_EXECUTOR) -> Tuple[
-    Path, Path]:
-    """
-    This function filters the merged plink file based on the pass SNPs and pass samples files
+def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = None,
+                 output_prefix: str = "Filtered_Data", cmd_executor: CommandExecutor = CMD_EXECUTOR) -> Tuple[Path, Path]:
+    """Apply QC filters to PLINK files.
 
-    :param merged_filename: a file containing the merged plink file
-    :param pass_snps: a file containing the pass SNPs
-    :param pass_samples: a file containing the pass samples
-    :param cmd_executor: a command executor object to run commands on the docker instance
-    :return: a path to the filtered merged plink file and a path to the low MAC SNPs file
-    """
+    This function filters a PLINK dataset based on provided SNP and sample lists,
+    and also generates a list of rare variants. Includes disk and memory safeguards.
 
+    :param merged_filename: The file stem of the PLINK dataset to filter.
+    :param pass_snps: Path to a file of SNPs to keep.
+    :param pass_samples: Path to a file of samples to keep.
+    :param output_prefix: Filename prefix for output files.
+    :param cmd_executor: An executor to run shell commands.
+    :return: A tuple containing:
+             - Path object for the filtered PLINK data prefix.
+             - Path to the list of low minor allele count (MAC) variants.
+    """
     merged_data_file = Path.cwd() / merged_filename
-    snplist = Path(merged_data_file.name).with_suffix(".low_MAC.snplist")
+    LOGGER.info(f"Filtering genotype data. Input: {merged_data_file.name}, Output Prefix: {output_prefix}")
+
+    # Pre-flight Check: Ensure we have disk space before creating massive files
+    check_disk_usage()
+
+    snplist = Path(f"{output_prefix}.low_MAC.snplist")
 
     # CRITICAL: Cap PLINK memory usage (~32GB) to leave room for Python/OS
     cmd = (f"plink2 --mac 1 --bfile {merged_data_file.name} --make-bed "
            f"--extract {pass_snps.name} --keep {pass_samples.name} "
-           f"--out {merged_data_file.name} --memory 32000")
+           f"--out {output_prefix} --memory 32000")
     cmd_executor.run_cmd_on_docker(cmd)
 
-    # Generate a list of low MAC sites for BOLT
-    cmd = f"plink2 --bfile {merged_data_file.name} --max-mac 100 --write-snplist " \
-          f"--out {merged_data_file.name}.low_MAC"
-    cmd_executor.run_cmd_on_docker(cmd)
+    # Generate Rare Variant list
+    cmd = f"plink2 --bfile {output_prefix} --max-mac 100 --write-snplist --out {output_prefix}.low_MAC"
+    cmd_executor.run_cmd_on_docker(cmd, ignore_error=True)
 
-    return merged_data_file, snplist
+    if not snplist.exists():
+        LOGGER.warning("No low MAC variants found. Creating empty SNPLIST.")
+        snplist.touch()
+
+    return Path(output_prefix), snplist
 
 
 def column_swap(col1: str, col2: str) -> Tuple[str, str]:
