@@ -1,107 +1,126 @@
 import csv
 import os
+import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Optional
 
 import dxpy
 import numpy as np
 import pandas as pd
 from general_utilities.import_utils.file_handlers.input_file_handler import InputFileHandler
-from general_utilities.job_management.command_executor import build_default_command_executor
+from general_utilities.job_management.command_executor import build_default_command_executor, CommandExecutor
+from general_utilities.mrc_logger import MRCLogger
 
 CMD_EXECUTOR = build_default_command_executor()
+LOGGER = MRCLogger().get_logger()
+
+
+def check_disk_usage(path: str = ".") -> None:
+    """Print disk usage statistics for the given path.
+
+    This is a debugging helper useful for diagnosing "No space left on device"
+    errors in large pipelines.
+
+    :param path: The path to check disk usage for. Defaults to current directory.
+    """
+    total, used, free = shutil.disk_usage(path)
+    LOGGER.info(
+        f"DISK USAGE ({path}): "
+        f"Total: {total // (2 ** 30)}GB | "
+        f"Used: {used // (2 ** 30)}GB | "
+        f"Free: {free // (2 ** 30)}GB"
+    )
+    # Run df -h for detailed mount visibility
+    subprocess.run("df -h", shell=True)
 
 
 def ingest_resources(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, relatedness_file: dict) -> \
-        Tuple[str, Path, Path, Path]:
+        Tuple[Set[str], Path, Path, Optional[Path]]:
+    """Download and prepare all necessary genetic and metadata files.
+
+    :param genetic_data_file: A DNAnexus file-like object (dict) for the genetic data coordinate list.
+    :param sample_ids_file: A DNAnexus file-like object (dict) for the sample IDs file.
+    :param ancestry_file: A DNAnexus file-like object (dict) for the ancestry file.
+    :param relatedness_file: A DNAnexus file-like object (dict) for the relatedness file, or None.
+    :return: A tuple containing:
+             - A set of genetic file stems (e.g., {'arrays', 'ukb_c1'}).
+             - Path to the sample IDs file.
+             - Path to the ancestry file.
+             - Path to the relatedness file (or None).
     """
-    This function downloads the data we will need to run this module
+    LOGGER.info("Starting resource ingestion...")
 
-    :param genetic_data_file: a file containing the genetic data file names and IDs
-    :param sample_ids_file: a file containing the sample IDs
-    :param ancestry_file: a file containing the ancestry sample IDs
-    :param relatedness_file: a file containing the relatedness matrix table
-    :return: a tuple of the genetic data file, sample IDs file, and ancestry file
-    """
-    # Ingest the UKBB plink files (this also includes relatedness and snp/sample QC files)
-    genetic_data_file = InputFileHandler(genetic_data_file, download_now=True).get_file_handle()
-    genetic_files = download_genetic_data(genetic_data_file)
+    genetic_data_handle = InputFileHandler(genetic_data_file, download_now=True).get_file_handle()
+    genetic_files = download_genetic_data(genetic_data_handle)
 
-    # Download a pre-computed sample IDs file.
-    sample_ids_file = InputFileHandler(sample_ids_file, download_now=True).get_file_handle()
+    sample_ids_handle = InputFileHandler(sample_ids_file, download_now=True).get_file_handle()
+    ancestry_handle = InputFileHandler(ancestry_file, download_now=True).get_file_handle()
 
-    # Download wba file:
-    ancestry_file = InputFileHandler(ancestry_file, download_now=True).get_file_handle()
-
-    # Download the relatedness files:
+    relatedness_handle = None
     if relatedness_file is not None:
-        relatedness_file = InputFileHandler(relatedness_file, download_now=True).get_file_handle()
+        relatedness_handle = InputFileHandler(relatedness_file, download_now=True).get_file_handle()
+        LOGGER.info(f"Relatedness file provided: {relatedness_handle.name}")
+    else:
+        LOGGER.info("No relatedness file provided; will calculate from scratch.")
 
-    return genetic_files, sample_ids_file, ancestry_file, relatedness_file
+    check_disk_usage()
+    return genetic_files, sample_ids_handle, ancestry_handle, relatedness_handle
 
 
-def download_genetic_data(input_file_list: Path) -> str:
+def download_genetic_data(input_file_list: Path) -> Set[str]:
+    """Parse a coordinate list file and download associated PLINK binaries.
+
+    :param input_file_list: Path to a text file containing [filename, path] columns.
+    :return: A set of unique genetic file stems that were downloaded.
     """
-    This function downloads the genetic data files using input coordinates
+    valid_extensions = {'.bed', '.bim', '.fam'}
+    stems = set()
 
-    :param input_file_list: a file containing the genetic data file names and IDs
-    :return: stem of one of the files for downstream use
-    """
-    # we should have two columns in the genetic input file
-    # the first column should be the filename
-    # the second column should be the file ID
-    # in total there should be 22 sets of .bed .bim .fam files
+    LOGGER.info(f"Parsing genetic coordinates from {input_file_list}")
     with open(input_file_list, 'r') as file:
-        lines = file.readlines()
-        # check we have 22 chromosomes in sets of 3
-        if len(lines) != 66:
-            raise ValueError("The file must contain exactly 66 lines, 3 for each chromosome.")
+        for line in file:
+            if not line.strip():
+                continue
 
-        for line in lines:
             columns = line.strip().split()
-            # check we have two columns, one being the filename and one being the file ID
             if len(columns) != 2:
-                raise ValueError(f"Each line must have exactly two columns. Invalid line: {line.strip()}")
+                raise ValueError(f"Invalid line format in coords file: {line.strip()}")
 
-            # Check that the second column contains valid file extensions
-            valid_extensions = {'.bed', '.bim', '.fam'}
-            if not any(columns[0].endswith(ext) for ext in valid_extensions):
-                raise ValueError(f"Invalid file format in second column: {columns[0]}")
+            filename, file_id = columns
+            if not any(filename.endswith(ext) for ext in valid_extensions):
+                raise ValueError(f"Invalid file extension: {filename}")
 
-            # download the files
-            file = line.strip().split()[1]
-            output = InputFileHandler(file, download_now=True).get_file_handle()
+            InputFileHandler(file_id, download_now=True).get_file_handle()
+            stems.add(Path(filename).stem)
 
-    # return the stem of one of the files so we can use it downstream
-    return output.stem
+    LOGGER.info(f"Downloaded {len(stems)} unique genetic file sets.")
+    return stems
 
 
-def merge_plink_files(genetic_files: str, cmd_executor=CMD_EXECUTOR) -> str:
+def merge_plink_files(genetic_files: Set[str], cmd_executor: CommandExecutor = CMD_EXECUTOR) -> str:
+    """Merge multiple PLINK binary files into a single dataset.
+
+    This method skips merging if only one file set is present.
+
+    :param genetic_files: A set of PLINK file stems to merge.
+    :param cmd_executor: An executor to run shell commands.
+    :return: The file stem of the merged PLINK dataset.
     """
-    This function merges all autosomal files together. It is assumed that the files are named in a way that
-    they can be matched by the prefix 'genetic_files.name' and that they are all in the same directory.
+    if len(genetic_files) == 1:
+        single_file = list(genetic_files)[0]
+        LOGGER.info(f"Only one genetic file detected ({single_file}). Skipping merge step.")
+        return single_file
 
-    :param genetic_files: the name of the genetic files to be merged
-    :param cmd_executor: a command executor object to run commands on the docker instance
-    :return: the name of the merged file
-    """
-
-    genetic_files = Path.cwd() / genetic_files
     output_stub = "Autosomes"
+    LOGGER.info(f"Merging {len(genetic_files)} PLINK files into '{output_stub}'...")
 
-    # Merge autosomal PLINK files together:
-    # List all files matching the prefix
-    matching_files = list(Path('.').glob(f"{genetic_files.name}*"))
-
-    # Write the matching base names (with 'test/' prepended and without extensions) to merge_list.txt
     with open('merge_list.txt', 'w') as merge_list:
-        # Use a set to remove duplicates
-        unique_base_names = {os.path.splitext(file.name)[0] for file in matching_files}
-        for base_name in sorted(unique_base_names):
-            merge_list.write(f"test/{base_name}\n")
-        # remove duplicates
-    cmd = f"plink2 --pmerge-list /test/merge_list.txt bfile --out /test/{output_stub}"
+        for base_name in sorted(genetic_files):
+            merge_list.write(f"{base_name}\n")
+
+    # force BED/BIM/FAM output
+    cmd = f"plink2 --pmerge-list merge_list.txt bfile --make-bed --out {output_stub}"
     cmd_executor.run_cmd_on_docker(cmd)
 
     return output_stub
