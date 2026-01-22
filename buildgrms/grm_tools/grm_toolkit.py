@@ -512,10 +512,12 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
     merged_data_file = Path.cwd() / merged_filename
     snplist = Path(merged_data_file.name).with_suffix(".low_MAC.snplist")
 
-    # Retain pass samples and pass SNPs
-    cmd = f"plink2 --mac 1 --pfile {merged_data_file.name} --make-bed --extract {pass_snps.name} " \
-          f"--keep-fam {pass_samples.name} --out {merged_data_file.name}"
+    # CRITICAL: Cap PLINK memory usage (~32GB) to leave room for Python/OS
+    cmd = (f"plink2 --mac 1 --bfile {merged_data_file.name} --make-bed "
+           f"--extract {pass_snps.name} --keep {pass_samples.name} "
+           f"--out {merged_data_file.name} --memory 32000")
     cmd_executor.run_cmd_on_docker(cmd)
+
     # Generate a list of low MAC sites for BOLT
     cmd = f"plink2 --bfile {merged_data_file.name} --max-mac 100 --write-snplist " \
           f"--out {merged_data_file.name}.low_MAC"
