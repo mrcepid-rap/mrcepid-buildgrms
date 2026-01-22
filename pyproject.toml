@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "buildgrms"
 version = "2.0.0"
@@ -16,9 +20,9 @@ dependencies = [
     "general-utilities @ git+https://github.com/mrcepid-rap/general_utilities.git@v2.0.0"
 ]
 
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+[project.urls]
+Repository = "https://github.com/mrcepid-rap/buildgrms"
 
-[tool.setuptools]
-packages = ["buildgrms"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["buildgrms*"]
