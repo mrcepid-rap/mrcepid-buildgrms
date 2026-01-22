@@ -224,11 +224,25 @@ def load_ancestry_dict(ancestry_file: Path) -> Dict[str, Set[str]]:
     ancestry_dict: Dict[str, Set[str]] = {'all': set()}
     with ancestry_file.open(mode='r') as ancestry_info:
         ancestry_reader = csv.DictReader(ancestry_info, delimiter="\t")
+        ancestry_col = None
+        # Find the column containing ancestry values
+        for col in ancestry_reader.fieldnames:
+            ancestry_info.seek(0)
+            next(ancestry_info)  # skip header
+            for row in ancestry_reader:
+                val = row[col].lower()
+                if val in {'eur', 'sas', 'afr'}:
+                    ancestry_col = col
+                    break
+            if ancestry_col:
+                break
+        ancestry_info.seek(0)
+        ancestry_reader = csv.DictReader(ancestry_info, delimiter="\t")
         for indv in ancestry_reader:
-            eid = str(indv['n_eid'])
+            eid = str(list(indv.values())[0])
             ancestry_dict['all'].add(eid)
-            if indv['ancestry'] != "NA":
-                ancestry_dict.setdefault(indv['ancestry'], set()).add(eid)
+            if ancestry_col and indv[ancestry_col] != "NA":
+                ancestry_dict.setdefault(indv[ancestry_col], set()).add(eid)
     return ancestry_dict
 
 
