@@ -21,14 +21,14 @@ LOGGER = MRCLogger().get_logger()
 
 
 @dxpy.entry_point('main')
-def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, snp_qc: dict, sample_qc: dict, ukb_snp_qc: dict, ukb_snps_qc_v2: dict, relatedness_file: dict):
+def main(genetic_data_file: dict, sample_ids_file: dict, ancestry_file: dict, snp_qc: dict = None, sample_qc: dict = None, ukb_snp_qc: dict = None, ukb_snps_qc_v2: dict = None, relatedness_file: dict = None):
     # Grab plink files and sample exclusion lists
     genetic_files, sample_ids_file, ancestry_file, relatedness = ingest_resources(genetic_data_file,
                                                                      sample_ids_file,
                                                                      ancestry_file,
                                                                      relatedness_file)
 
-    if (snp_qc and sample_qc) is None and (ukb_snp_qc and ukb_snps_qc_v2) is None:
+    if not ((snp_qc and sample_qc) or (ukb_snp_qc and ukb_snps_qc_v2)):
         raise ValueError(
             "Either both SNP QC and Sample QC files, or both UKB SNP QC files must be provided. Please check your input files.")
 
