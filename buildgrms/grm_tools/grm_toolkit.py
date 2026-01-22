@@ -142,7 +142,7 @@ def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> 
     # first we need to calculate the PCs
     # as it takes a long time let's only do this if the file does not already exist
     if not Path(f"{genetic_data_file.name}.eigenvec.allele").exists():
-        cmd = f"plink2 -pfile /test/{genetic_data_file.name} --pca 3 allele-wts --out /test/{genetic_data_file.name}"
+        cmd = f"plink2 -pfile {genetic_data_file.name} --pca 3 allele-wts --out {genetic_data_file.name}"
         cmd_executor.run_cmd_on_docker(cmd)
 
     eigen_df = pd.read_csv(f"{genetic_data_file.name}.eigenvec.allele", sep='\t')
@@ -154,15 +154,15 @@ def calculate_relatedness(genetic_data_file: str, cmd_executor=CMD_EXECUTOR) -> 
 
     # Filter variants for kinship analysis using PLINK2
     cmd = (
-        f"plink2 --pfile test/{genetic_data_file.name} "
-        f"--extract test/{genetic_data_file.name}_eigen_filtered.txt "
+        f"plink2 --pfile {genetic_data_file.name} "
+        f"--extract {genetic_data_file.name}_eigen_filtered.txt "
         f"--make-bed "
-        f"--out test/{genetic_data_file.name}_filtered_for_kinship"
+        f"--out {genetic_data_file.name}_filtered_for_kinship"
     )
     cmd_executor.run_cmd_on_docker(cmd)
 
     # # Calculate relatedness using KING:
-    cmd = f"plink2 --bfile /test/{genetic_data_file.name}_filtered_for_kinship --make-king-table --out /test/{relatedness_db}"
+    cmd = f"plink2 --bfile {genetic_data_file.name}_filtered_for_kinship --make-king-table --out {relatedness_db}"
     cmd_executor.run_cmd_on_docker(cmd)
 
     with open(f"{relatedness_db}.kin0", 'r') as kin0_file:
@@ -375,7 +375,7 @@ def calculate_missingness(merged_filename: str, cmd_executor=CMD_EXECUTOR) -> di
     missingness_db = "missingness_out"
 
     # First generate missingness information for all SNPs:
-    cmd = f"plink2 --missing 'variant-only' --pfile /test/{merged_data_file.name} --out /test/{missingness_db}"
+    cmd = f"plink2 --missing 'variant-only' --pfile {merged_data_file.name} --out {missingness_db}"
     cmd_executor.run_cmd_on_docker(cmd)
 
     # Then read as a pandas DataFrame:
@@ -513,12 +513,12 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
     snplist = Path(merged_data_file.name).with_suffix(".low_MAC.snplist")
 
     # Retain pass samples and pass SNPs
-    cmd = f"plink2 --mac 1 --pfile /test/{merged_data_file.name} --make-bed --extract /test/{pass_snps.name} " \
-          f"--keep-fam /test/{pass_samples.name} --out /test/{merged_data_file.name}"
+    cmd = f"plink2 --mac 1 --pfile {merged_data_file.name} --make-bed --extract {pass_snps.name} " \
+          f"--keep-fam {pass_samples.name} --out {merged_data_file.name}"
     cmd_executor.run_cmd_on_docker(cmd)
     # Generate a list of low MAC sites for BOLT
-    cmd = f"plink2 --bfile /test/{merged_data_file.name} --max-mac 100 --write-snplist " \
-          f"--out /test/{merged_data_file.name}.low_MAC"
+    cmd = f"plink2 --bfile {merged_data_file.name} --max-mac 100 --write-snplist " \
+          f"--out {merged_data_file.name}.low_MAC"
     cmd_executor.run_cmd_on_docker(cmd)
 
     return merged_data_file, snplist
