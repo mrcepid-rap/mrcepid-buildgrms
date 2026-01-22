@@ -233,6 +233,8 @@ def load_ancestry_dict(ancestry_file: Path) -> Dict[str, Set[str]]:
                 val = row[col].lower()
                 if val in {'eur', 'sas', 'afr'}:
                     ancestry_col = col
+                    # print the column we found so we can check it's correct
+                    LOGGER.info(f"Ancestry column detected: {ancestry_col}")
                     break
             if ancestry_col:
                 break
