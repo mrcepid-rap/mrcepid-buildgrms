@@ -427,15 +427,18 @@ def check_qc_ukb(wes_samples: Set[str], missingness: Dict[str, float], ukb_snp_q
          'excess.relatives', 'in.wba', 'used.pc']
     h.extend([f"PC{x}" for x in range(1, 41)])
     h.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
+    # QC based on qc_ukb metrics
     with open(ukb_sqc_v2_with_fam, 'r') as f_in, pass_samples.open('w') as f_out:
         reader = csv.DictReader(f_in, delimiter=" ", fieldnames=h)
         for s in reader:
-            # s['ID1'] is FID, s['ID2'] is IID from the .fam file
-            # wes_samples are IIDs, so we check against s['ID2']
             if s['ID2'] in wes_samples:
-                # Check logic: het outlier must be 0, phasing must be 1
-                if s['het.missing.outliers'] == "0" and s['in.phasing.auto'] == "1":
+                if (s['het.missing.outliers'] == "0"
+                        and s['in.phasing.auto'] == "1"
+                        and s['in.phasing.x'] == "1"
+                        and s['in.phasing.xy'] == "1"):
                     f_out.write(f"{s['ID1']} {s['ID2']}\n")
+            else:
+                LOGGER.warning(f"Sample {s['ID2']} in UKB QC file not found in WES samples list!")
     return pass_snps_file, pass_samples
 
 
@@ -500,7 +503,7 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
     cmd_executor.run_cmd_on_docker(cmd)
 
     # Generate Rare Variant list
-    cmd = f"plink2 --bfile {output_prefix} --max-m1ac 100 --write-snplist --out {output_prefix}.low_MAC"
+    cmd = f"plink2 --bfile {output_prefix} --max-mac 100 --write-snplist --out {output_prefix}.low_MAC"
     cmd_executor.run_cmd_on_docker(cmd, ignore_error=True)
 
     if not snplist.exists():
