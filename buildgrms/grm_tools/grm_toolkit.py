@@ -437,8 +437,6 @@ def check_qc_ukb(wes_samples: Set[str], missingness: Dict[str, float], ukb_snp_q
                         and s['in.phasing.x'] == "1"
                         and s['in.phasing.xy'] == "1"):
                     f_out.write(f"{s['ID1']} {s['ID2']}\n")
-            else:
-                LOGGER.warning(f"Sample {s['ID2']} in UKB QC file not found in WES samples list!")
     return pass_snps_file, pass_samples
 
 
