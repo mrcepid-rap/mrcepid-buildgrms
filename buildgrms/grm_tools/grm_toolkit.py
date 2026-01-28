@@ -252,8 +252,24 @@ def load_samples(sample_ids_file: Path) -> Set[str]:
     :return: a set of individual IDs
     """
     # Read overall list of individuals with data so we can subset the genetic data.
+    LOGGER.info(f"Loading samples from {sample_ids_file.name}...")
+
+    # DEBUG: Print raw first few lines of the input file
+    print(f"--- DEBUG: Head of {sample_ids_file.name} ---")
+    subprocess.run(f"head -n 5 {sample_ids_file.name}", shell=True)
+    print("-----------------------------------------------")
+
     with sample_ids_file.open('r') as wes_samp_file:
-        return {line.strip().split()[0] for line in wes_samp_file if line.strip()}
+        # Strip whitespace and check if empty
+        samples = {line.strip().split()[0] for line in wes_samp_file if line.strip()}
+
+    LOGGER.info(f"Loaded {len(samples)} samples.")
+    if len(samples) > 0:
+        print(f"--- DEBUG: First 5 loaded samples (Python Set) ---")
+        print(list(samples)[:5])
+        print("--------------------------------------------------")
+
+    return samples
 
 
 def load_relatedness(relatedness: Path, wes_samples: Set[str]) -> pd.DataFrame:
@@ -395,9 +411,12 @@ def check_qc_ukb(wes_samples: Set[str], missingness: Dict[str, float], ukb_snp_q
     :param ukb_snps_qc_v2: Path to the UKB sample QC file (version 2).
     :return: A tuple containing paths to the passing SNPs file and passing samples file.
     """
+
     pass_snps_file = Path("pass_snps.txt")
     pass_samples = Path("pass_samples.txt")
-    # SNP QC
+
+    LOGGER.info("Starting SNP QC...")
+    # SNP QC (Unchanged logic, just added logging)
     with open(ukb_snp_qc, 'r') as f_in, pass_snps_file.open('w') as f_out:
         reader = csv.DictReader(f_in, delimiter=" ")
         arrs = [f"Batch_b{x:03d}_qc" for x in range(1, 96)] + [f"UKBiLEVEAX_b{x}_qc" for x in range(1, 12)]
@@ -405,38 +424,83 @@ def check_qc_ukb(wes_samples: Set[str], missingness: Dict[str, float], ukb_snp_q
             if snp['array'] == "2" and int(snp['chromosome']) <= 22 and missingness[snp['rs_id']] < 0.05:
                 if all(snp[a] == "1" for a in arrs):
                     f_out.write(snp['rs_id'] + "\n")
-    # Sample QC
+
+    LOGGER.info("Starting Sample QC...")
     ukb_sqc_v2_with_fam = Path("ukb_sqc_v2_with_fam.txt")
-    # 1. Find a .fam file to provide the IDs.
-    # We look for any .fam file in the current directory, prioritising 'Autosomes.fam'
+
+    # 1. Find FAM
     fam_file = Path('Autosomes.fam')
     if not fam_file.exists():
         try:
             fam_file = list(Path('.').glob('*.fam'))[0]
         except IndexError:
-            raise FileNotFoundError("No .fam file found to align QC data! This is required for UKB.")
+            raise FileNotFoundError("No .fam file found to align QC data!")
+
     LOGGER.info(f"Aligning QC metadata using FAM file: {fam_file.name}")
-    # 2. Paste FAM + QC together.
-    # This aligns the Genotype IDs (Column 1 of FAM) with the QC Data.
+
+    # DEBUG: Check the FAM file before pasting
+    print(f"--- DEBUG: Head of {fam_file.name} (Columns: FID IID ...) ---")
+    subprocess.run(f"head -n 5 {fam_file.name}", shell=True)
+
+    # 2. Paste FAM + QC
     subprocess.run(f'paste -d " " {fam_file.name} {ukb_snps_qc_v2} > {ukb_sqc_v2_with_fam}', shell=True)
-    # 3. Read the Aligned File
-    # The headers 'h' are designed for the pasted file (ID1/ID2 come from the FAM part)
+
+    # DEBUG: Check the resulting pasted file
+    print(f"--- DEBUG: Head of {ukb_sqc_v2_with_fam} (Checking alignment) ---")
+    subprocess.run(f"head -n 5 {ukb_sqc_v2_with_fam}", shell=True)
+    print("---------------------------------------------------------------")
+
+    # 3. Read and Filter
     h = ['ID1', 'ID2', 'null1', 'null2', 'fam.gender', 'batch1', 'affyID1', 'affyID2', 'array', 'batch2', 'plate',
-         'well', 'call.rate', 'dQC', 'dna.conc', 'sub.gender', 'inf.gender', 'x.int', 'y.int', 'plate.sub', 'well.sub',
+         'well', 'call.rate', 'dQC', 'dna.conc', 'sub.gender', 'inf.gender', 'x.int', 'y.int', 'plate.sub',
+         'well.sub',
          'missing.rate', 'het', 'het.pc.corr', 'het.missing.outliers', 'aneuploidy', 'in.kinship', 'excl.kinship',
          'excess.relatives', 'in.wba', 'used.pc']
     h.extend([f"PC{x}" for x in range(1, 41)])
     h.extend(['in.phasing.auto', 'in.phasing.x', 'in.phasing.xy'])
-    # QC based on qc_ukb metrics
+
+    kept_count = 0
+    total_count = 0
+
     with open(ukb_sqc_v2_with_fam, 'r') as f_in, pass_samples.open('w') as f_out:
         reader = csv.DictReader(f_in, delimiter=" ", fieldnames=h)
-        for s in reader:
+
+        # DEBUG: Inspect the first row parsed by DictReader to ensure headers match data
+        first_row = next(reader)
+        print("--- DEBUG: First Parsed Row Dict (Check Keys vs Values) ---")
+        print(f"ID1 (FID): {first_row.get('ID1')}")
+        print(f"ID2 (IID): {first_row.get('ID2')}")
+        print(f"het.missing.outliers: {first_row.get('het.missing.outliers')}")
+        print("-----------------------------------------------------------")
+
+        # Reset file pointer or process the first row manually, then loop
+        # Simpler here to just process first_row then loop the rest
+        rows_chain = [first_row]
+
+        for s in list(rows_chain) + list(reader):
+            total_count += 1
+            # Debug the first rejection if logic fails
+            if total_count == 1:
+                if s['ID2'] not in wes_samples:
+                    print(f"DEBUG REJECTION [Sample 1]: ID2 '{s['ID2']}' not found in wes_samples set.")
+                elif not (s['het.missing.outliers'] == "0" and s['in.phasing.auto'] == "1"):
+                    print(
+                        f"DEBUG REJECTION [Sample 1]: Logic failed. Het: {s['het.missing.outliers']}, Phasing: {s['in.phasing.auto']}")
+
             if s['ID2'] in wes_samples:
                 if (s['het.missing.outliers'] == "0"
                         and s['in.phasing.auto'] == "1"
                         and s['in.phasing.x'] == "1"
                         and s['in.phasing.xy'] == "1"):
                     f_out.write(f"{s['ID1']} {s['ID2']}\n")
+                    kept_count += 1
+
+    LOGGER.info(f"Sample QC Complete. Processed {total_count} rows. Wrote {kept_count} samples to pass_samples.txt")
+
+    # DEBUG: Check if we wrote anything
+    if kept_count == 0:
+        print("!!! CRITICAL WARNING: No samples passed QC. pass_samples.txt is empty.")
+
     return pass_snps_file, pass_samples
 
 
@@ -489,18 +553,35 @@ def filter_plink(merged_filename: str, pass_snps: Path, pass_samples: Path = Non
     merged_data_file = Path.cwd() / merged_filename
     LOGGER.info(f"Filtering genotype data. Input: {merged_data_file.name}, Output Prefix: {output_prefix}")
 
-    # Pre-flight Check: Ensure we have disk space before creating massive files
     check_disk_usage()
-
     snplist = Path(f"{output_prefix}.low_MAC.snplist")
+
+    # --- DEBUGGING BLOCK START ---
+    print("\n================= PRE-PLINK DEBUGGING =================")
+    print(f"1. Checking Input PLINK FAM file: {merged_data_file.name}.fam")
+    if Path(f"{merged_data_file.name}.fam").exists():
+        subprocess.run(f"head -n 5 {merged_data_file.name}.fam", shell=True)
+    else:
+        print("!!! FAM FILE DOES NOT EXIST !!!")
+
+    print(f"\n2. Checking Keep List file: {pass_samples.name}")
+    if pass_samples.exists():
+        subprocess.run(f"wc -l {pass_samples.name}", shell=True)
+        subprocess.run(f"head -n 5 {pass_samples.name}", shell=True)
+    else:
+        print("!!! PASS SAMPLES FILE DOES NOT EXIST !!!")
+    print("=======================================================\n")
+    # --- DEBUGGING BLOCK END ---
 
     # CRITICAL: Cap PLINK memory usage (~32GB) to leave room for Python/OS
     cmd = (f"plink2 --mac 1 --bfile {merged_data_file.name} --make-bed "
            f"--extract {pass_snps.name} --keep {pass_samples.name} "
            f"--out {output_prefix} --memory 32000")
+
     cmd_executor.run_cmd_on_docker(cmd)
 
     # Generate Rare Variant list
+    # Fixed typo from --max-m1ac to --max-mac
     cmd = f"plink2 --bfile {output_prefix} --max-mac 100 --write-snplist --out {output_prefix}.low_MAC"
     cmd_executor.run_cmd_on_docker(cmd, ignore_error=True)
 
