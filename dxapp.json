@@ -28,20 +28,6 @@
       "help": "List of individuals demarcated by ancestry for current application with one sample ID per line. Ancestry label must be one of eur, sas, afr, or NA."
     },
     {
-      "name": "snp_qc",
-      "label": "A SNP QC file for inclusion/exclusion of variants.",
-      "class": "file",
-      "optional": true,
-      "help": "This file should contain variant-level QC information from the sequencing experiments."
-    },
-    {
-      "name": "sample_qc",
-      "label": "A sample QC file for inclusion/exclusion of samples.",
-      "class": "file",
-      "optional": true,
-      "help": "This file should contain any sample-level QC information from the sequencing experiments."
-    },
-    {
       "name": "ukb_snp_qc",
       "label": "List of individuals with assigned ancestry status.",
       "class": "file",
