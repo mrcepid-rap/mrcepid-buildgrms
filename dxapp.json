@@ -3,7 +3,7 @@
   "title": "BuildGRMs",
   "summary": "Generates a variety of Relatedness Matrices for various burden testing methods",
   "dxapi": "1.0.0",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "openSource": true,
   "inputSpec": [
     {
@@ -141,7 +141,7 @@
         "name": "mrcepid-buildgrms",
         "package_manager": "git",
         "url": "https://github.com/mrcepid-rap/mrcepid-buildgrms.git",
-        "tag": "bugfix/work-with-ukb",
+        "tag": "v1.0.0",
         "build_commands": "uv pip install --system ."
       }
     ]

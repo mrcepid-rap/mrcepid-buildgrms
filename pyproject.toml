@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "buildgrms"
-version = "2.0.0"
+version = "1.0.0"
 description = ""
 authors = [
     { name = "Eugene Gardner", email = "eugene.gardner@mrc-epid.cam.ac.uk" },
