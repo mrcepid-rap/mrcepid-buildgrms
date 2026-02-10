@@ -1,22 +1,28 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "buildgrms"
-version = "0.1.0"
+version = "1.0.0"
 description = ""
 authors = [
-  { name = "Alish Palmos", email = "alish.palmos@insmed.com" }
-    ]
+    { name = "Eugene Gardner", email = "eugene.gardner@mrc-epid.cam.ac.uk" },
+    { name = "Alish Palmos", email = "alish.palmos@insmed.com" }
+
+]
 readme = "README.md"
 requires-python = ">=3.8,<3.9"
 dependencies = [
     "dxpy==0.346.0",
     "pandas==1.5.2",
     "numpy==1.23.2",
-    "general-utilities @ git+https://github.com/mrcepid-rap/general_utilities.git@main"
+    "general-utilities @ git+https://github.com/mrcepid-rap/general_utilities.git@v2.0.0"
 ]
 
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+[project.urls]
+Repository = "https://github.com/mrcepid-rap/buildgrms"
 
-[tool.setuptools]
-packages = ["buildgrms"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["buildgrms*"]

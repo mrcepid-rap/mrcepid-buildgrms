@@ -10,3 +10,4 @@ buildgrms/__pycache__/
 test/__pycache__/
 buildgrms/grm_tools/__pycache__/
 .venv
+test/*
