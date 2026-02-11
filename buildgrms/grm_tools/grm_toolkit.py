@@ -173,9 +173,9 @@ def write_and_upload_ancestry_files(wes_samples: Set[str], ancestry_dict: Dict[s
         with unrelated_path.open('w') as unrelated_file, related_path.open('w') as related_file:
             for samp in wes_samples:
                 if samp in pass_samples:
-                    unrelated_file.write(f"0 {samp}\n")  # FID 0
+                    unrelated_file.write(f"{samp}\n")  # FID removed
                 if samp in ancestry_dict[ancestry]:
-                    related_file.write(f"0 {samp}\n")  # FID 0
+                    related_file.write(f"{samp}\n")  # FID removed
 
         include_files.append(exporter.export_files(unrelated_path.name))
         include_files.append(exporter.export_files(related_path.name))
